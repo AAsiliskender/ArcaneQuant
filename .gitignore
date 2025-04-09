@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environments
+.env
+.venv/
+*.egg-info/
+
+# Databases or notebooks
+*.db
+*.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
