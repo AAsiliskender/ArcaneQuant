@@ -3,9 +3,11 @@ __pycache__/
 *.py[cod]
 
 # Environments
-.env
+APIkey.env
+SQLlogin.env
 .venv/
 *.egg-info/
+
 
 # Databases or notebooks
 *.db
@@ -14,3 +16,6 @@ __pycache__/
 # IDEs
 .vscode/
 .idea/
+
+# Data
+data/StockHistData
