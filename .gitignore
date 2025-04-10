@@ -18,12 +18,13 @@ SQLlogin.env
 
 # Data
 data/*
+data/StockHistData/*
 
 # EXCEPTION FOR IGNORE
 !data/
 !data/StockHistData/
 !data/StockHistData/dataManifest.json
-!data/StockHistData/MSFT/*
-!data/StockHistData/NVDA/*
+!data/StockHistData/MSFT/
+!data/StockHistData/NVDA/
 !data/StockHistData/MSFT/*.csv
 !data/StockHistData/NVDA/*.csv
