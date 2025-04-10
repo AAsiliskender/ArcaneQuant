@@ -19,5 +19,5 @@ SQLlogin.env
 # Data
 data/*
 !data/StockHistData/dataManifest.json
-!data/StockHistData/MSFT
-!data/StockHistData/NVDA
+!data/StockHistData/MSFT/*
+!data/StockHistData/NVDA/*
