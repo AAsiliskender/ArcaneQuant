@@ -17,7 +17,8 @@ SQLlogin.env
 .idea/
 
 # Data
+data/*
+!data/
 !data/StockHistData/dataManifest.json
 !data/StockHistData/MSFT/*
 !data/StockHistData/NVDA/*
-data/*
