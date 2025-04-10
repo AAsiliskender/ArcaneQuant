@@ -8,7 +8,6 @@ SQLlogin.env
 .venv/
 *.egg-info/
 
-
 # Databases or notebooks
 *.db
 *.ipynb_checkpoints/
@@ -19,3 +18,6 @@ SQLlogin.env
 
 # Data
 data/StockHistData
+!data/StockHistData/dataManifest.json
+!data/StockHistData/MSFT
+!data/StockHistData/NVDA
