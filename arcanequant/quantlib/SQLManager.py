@@ -16,7 +16,7 @@ class SQLManager():
 
 
 # Method to provide query for setting key(s) for a table (after dropping existing one first)
-def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
+def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None, echo = False):
     """
     Provides query to set the keys of a table (from a column(s)) in an SQL database. You must specify the sort of key being set
     (default is primary) and the and the key name (column(s)) and additional reference data, if applicable. Uses postgreSQL dialect.
@@ -32,6 +32,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
     of reference table (refTable,refCol); refTable must be string, while refCol can be string or iterable of string (if multiple
     columns). More details provided below. Required for foreign keys, NoneType for all else.
     - engine - SQL engine to connect to database to execute query, if provided
+    - echo - Echo output/actions from function
 
     Type of keys/constraints settable:
     - Primary (kType = 'primary', using one key)
@@ -53,7 +54,6 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
     - If each refCol is same size as keys, then composite keys are made, same as the number of reference points.
     """
     
-    
     # Create wall of string (docstring) to use with sqlalchemy's text
     wallstring = ""
 
@@ -67,11 +67,11 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
 
         # If single string input (not iterable of string)
         if isinstance(keys,str): 
-            print(f'Setting Primary Key for table {tableName}')
+            if echo: print(f'Setting Primary Key for table {tableName}')
             addkeys = '"' + keys + '"'
             
         else: # Iterable of string input
-            print(f'Setting Composite (Primary) Key for table {tableName}')
+            if echo: print(f'Setting Composite (Primary) Key for table {tableName}')
             i = 0
             for key in keys:
                 if i == 0:
@@ -93,7 +93,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
 
         # If single reference set (not iterable of references), non-composite key
         if isinstance(keys,str) and all(isinstance(refset, str) for refset in ref) and len(ref) == 2:
-            print(f'Setting Foreign Key for table {tableName} using references')
+            if echo: print(f'Setting Foreign Key for table {tableName} using references')
             
             refTable = ref[0]
             refCol = ref[1]
@@ -107,7 +107,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
 
         # Concatenate each reference set change into one set of queries (multiple non-composite keys)
         elif all( (    all(isinstance(val, str) for val in refset)    and    len(refset) == 2 ) for refset in ref )    and    len(keys) == len(ref):
-            print(f'Setting multiple Foreign Keys for table {tableName} using references')
+            if echo: print(f'Setting multiple Foreign Keys for table {tableName} using references')
 
             for i in range(len(ref)): # Note: len(ref) is same as len(keys) (we are sure keys is iterable of string)
                 key = keys[i]
@@ -124,7 +124,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
         # If single reference set but iterable refCols, single composite key
         # This scenario: Match all given keys to all given refCols in the given refTable
         elif isinstance(ref[0],str)    and    all(isinstance(val,str) for val in ref[1])    and     len(ref) == 2    and    len(ref[1]) == len(keys):
-            print(f'Setting a composite Foreign Key for table {tableName} using references')
+            if echo: print(f'Setting a composite Foreign Key for table {tableName} using references')
             
             refTable = ref[0]
             refCols = ref[1]
@@ -156,7 +156,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
         # This scenario: Match all given keys to all given refCols in each refTable
         elif (    all((    isinstance(refset[0],str)    and    all(isinstance(val, str) for val in refset[1])
                        and    len(refset) == 2 ) for refset in ref)    and    all(len(refset[1]) == len(keys) for refset in ref)    ):
-            print(f'Setting multiple composite Foreign Keys for table {tableName} using references')
+            if echo: print(f'Setting multiple composite Foreign Keys for table {tableName} using references')
 
             keySeq = str(tuple(keys)).replace("'", '"').replace(",)", ')')
             keylistname = ""
@@ -189,7 +189,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
     
     
     elif kType.lower() == 'unique': # Create unique 'key' (constraint)
-        print(f'Setting Unique Key(s) constraint(s) for table {tableName}')
+        if echo: print(f'Setting Unique Key(s) constraint(s) for table {tableName}')
         
 
         # If single string input (not iterable of string)
@@ -219,7 +219,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
         
 
     elif kType.lower() == 'secondary': # Create secondary 'key' (index)
-        print(f'Setting Secondary Key(s)/Indices for table {tableName}')
+        if echo: print(f'Setting Secondary Key(s)/Indices for table {tableName}')
 
         # If single string input (not iterable of string)
         if isinstance(keys,str): 
@@ -252,14 +252,14 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None):
 
     # Execute alteration
     if engine:
-        print('Committing key set')
+        if echo: print('Committing key set')
         ExecuteSQL(wallstring, engine)
             
     return wallstring
 
 
 # Method to provide query for dropping key(s) for a table (without replacing with another one)
-def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine = None):
+def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine = None, echo = False):
     """
     Provides query to delete the keys of a table in an SQL database. You must specify the sort of key being dropped
     (default is primary) and the key name (column(s)) and additional reference data, if applicable. Uses postgreSQL dialect.
@@ -274,6 +274,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
     - ref - Iterable Size 2 (or an iterable of iterable size-2 if multiple) specifying table and then column name of reference table in string
     in form (refTable,refCol). Required for foreign keys, NoneType for all else
     - engine - SQL engine to connect to database to execute query, if provided
+    - echo - Echo output/actions from function
 
     Type of keys/constraints that can be dropped:
     - Primary/Composite (kType = 'primary', does not require keys/key names)
@@ -281,7 +282,6 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
     - Unique (kType = 'unique')
     - Secondary (kType='secondary')
     """
-    
     
     # Create wall of string (docstring) to use with sqlalchemy's text
     wallstring = ""
@@ -291,7 +291,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
     if kType.lower() != 'primary' and not all(isinstance(key, str) for key in keys): raise KeyError("All keys must be in string")
 
     if kType.lower() == 'primary': # Create primary/composite key
-        print(f'Dropping Primary/Composite Key for table {tableName}')
+        if echo: print(f'Dropping Primary/Composite Key for table {tableName}')
 
         wallstring = f"""
                         ALTER TABLE \"{tableName}\"
@@ -303,7 +303,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
 
         # If single reference set (not iterable of references), non-composite key
         if isinstance(keys,str) and all(isinstance(refset, str) for refset in ref) and len(ref) == 2:
-            print(f'Dropping Foreign Key for table {tableName} using references')
+            if echo: print(f'Dropping Foreign Key for table {tableName} using references')
             
             refTable = ref[0]
             refCol = ref[1]
@@ -315,7 +315,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
 
         # Concatenate each reference set change into one set of queries (multiple non-composite keys)
         elif all( (    all(isinstance(val, str) for val in refset)    and    len(refset) == 2 ) for refset in ref )    and    len(keys) == len(ref):
-            print(f'Dropping multiple Foreign Keys for table {tableName} using references')
+            if echo: print(f'Dropping multiple Foreign Keys for table {tableName} using references')
 
             for i in range(len(ref)): # Note: len(ref) is same as len(keys) (we are sure keys is iterable of string)
                 key = keys[i]
@@ -330,7 +330,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
         # If single reference set but iterable refCols, single composite key
         # This scenario: Match all given keys to all given refCols in the given refTable
         elif isinstance(ref[0],str)    and    all(isinstance(val,str) for val in ref[1])    and     len(ref) == 2    and    len(ref[1]) == len(keys):
-            print(f'Dropping a composite Foreign Key for table {tableName} using references')
+            if echo: print(f'Dropping a composite Foreign Key for table {tableName} using references')
             
             refTable = ref[0]
             refCols = ref[1]
@@ -358,7 +358,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
         # This scenario: Match all given keys to all given refCols in each refTable
         elif (    all((    isinstance(refset[0],str)    and    all(isinstance(val, str) for val in refset[1])
                        and    len(refset) == 2 ) for refset in ref)    and    all(len(refset[1]) == len(keys) for refset in ref)    ):
-            print(f'Setting multiple composite Foreign Keys for table {tableName} using references')
+            if echo: print(f'Setting multiple composite Foreign Keys for table {tableName} using references')
 
             keylistname = ""
             for i in range(len(ref)): # Note: len(refCols) is the same size as len(keys) (and ref is iterable(string,iterable(string)) )
@@ -385,7 +385,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
     
     
     elif kType.lower() == 'unique': # Create unique 'key' (constraint)
-        print(f'Dropping unique key(s) constraints for table {tableName}')
+        if echo: print(f'Dropping unique key(s) constraints for table {tableName}')
         
 
         # If single string input (not iterable of string)
@@ -411,7 +411,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
                             """
 
     elif kType.lower() == 'secondary': # Create secondary 'key' (index)
-        print(f'Dropping Secondary Key(s)/Indices for table {tableName}')
+        if echo: print(f'Dropping Secondary Key(s)/Indices for table {tableName}')
 
         # If single string input (not iterable of string)
         if isinstance(keys,str): 
@@ -438,7 +438,7 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
     
     
     if engine:
-        print('Committing key drop')
+        if echo: print('Committing key drop')
         ExecuteSQL(wallstring, engine)
 
     return wallstring

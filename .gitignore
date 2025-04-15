@@ -21,6 +21,7 @@ data/*
 data/StockHistData/*
 
 # EXCEPTION FOR IGNORE
+# When ignoring a folder but exception inside, you must except all folders on the way there (so each folder is searched)
 !data/
 !data/StockHistData/
 !data/StockHistData/dataManifest.json
