@@ -1,6 +1,5 @@
 [project]
 name = "arcanequant"
-
 description = "A framework for algorithmic and high-frequency trading"
 authors = [{ name = "Ahmed Asiliskender", email = "ahmedasiliskender@gmail.com" }]
 maintainers = [{ name = "Ahmed Asiliskender", email = "ahmedasiliskender@gmail.com" }]
