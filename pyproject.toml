@@ -44,12 +44,3 @@ filename = "CHANGELOG.md"
 search = "^# Changelog\n\n"
 replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n- TODO: Describe changes\n\n"
 regex = true
-
-#[tool.changelog_gen]
-#current_version = "0.1.3"
-#version_string = "{new_version}"
-#reject_empty = true
-#allowed_branches = [
-#    "main",
-#]
-#date_format = "%Y-%m-%d"
