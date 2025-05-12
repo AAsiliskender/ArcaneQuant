@@ -55,5 +55,3 @@ allowed_branches = [
     "main",
 ]
 date_format = "%Y-%m-%d"
-
-#testing
