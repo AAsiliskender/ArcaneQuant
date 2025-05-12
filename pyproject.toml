@@ -21,16 +21,26 @@ pythonpath = ["."]
 addopts = "-ra"
 
 
-#[tool.bumpversion]
-#current_version = "0.0.1"
-#commit = true
-#tag = true
-#changelog = true
+[bumpversion]
+current_version = "0.0.1"
+commit = True
+tag = True
+tag_name = "v{new_version}"
+tag_message = "Bump version: {current_version} → {new_version}"
+changelog = True
 
-#[[tool.bumpversion.files]]
-#filename = "pyproject.toml"
 
-#[[tool.bumpversion.files]]
-#filename = "CHANGELOG.md"
-#search = "{current_version}...HEAD"
-#replace = "{current_version}...{new_version}"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+ignore_missing_version = False
+sign_tags = False
+allow_dirty = False
+regex = True
+commit_args = ""
+
+[bump-my-version:file:pyproject.toml]
+
+[bump-my-version:file:CHANGELOG.md]
+search = "^## \[{current_version}\].*$"
+replace = "## \[{new_version}\] - {date}"
+regex = True
