@@ -1,6 +1,6 @@
 [project]
 name = "arcanequant"
-version = "0.1.0"
+version = "0.1.1"
 description = "A framework for algorithmic and high-frequency trading"
 authors = [{ name = "Ahmed Asiliskender", email = "ahmedasiliskender@gmail.com" }]
 readme = "README.md"
@@ -43,6 +43,6 @@ filename = "pyproject.toml"
 
 [[tool.bump-my-version.files]]
 filename = "CHANGELOG.md"
-search = "^## \\[{current_version}\\] - .*$"
-replace = "## \\[{new_version}\\] - {date}"
+search = "^# Changelog\n\n"
+replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n- TODO: Describe changes\n\n"
 regex = true
