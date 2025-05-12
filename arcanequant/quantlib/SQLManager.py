@@ -472,3 +472,4 @@ def postgres_upsert(table, conn, keys, data_iter):
 
 # Every ticker is unique as alphavantage only provides US-based equities
 # Note: for upsert to be applied, the table must have a primary key
+ 

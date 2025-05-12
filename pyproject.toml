@@ -5,6 +5,9 @@ description = "A framework for algorithmic and high-frequency trading"
 authors = [{ name = "Ahmed Asiliskender", email = "ahmedasiliskender@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.0.0"
+]
 
 [build-system]
 requires = ["setuptools", "wheel"]
@@ -16,3 +19,18 @@ where = ["."]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = "-ra"
+
+
+#[tool.bumpversion]
+#current_version = "0.0.1"
+#commit = true
+#tag = true
+#changelog = true
+
+#[[tool.bumpversion.files]]
+#filename = "pyproject.toml"
+
+#[[tool.bumpversion.files]]
+#filename = "CHANGELOG.md"
+#search = "{current_version}...HEAD"
+#replace = "{current_version}...{new_version}"

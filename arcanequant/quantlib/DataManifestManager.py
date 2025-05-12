@@ -295,11 +295,11 @@ class DataManifest():
         # Saving to SQL database (if possible)
         # Save if the SQLengine is already established, if not try connect to SQL first
         # If run into errors, cancel this operation
+        skipEngine = False
         if self.SQLengine is None:
-            skipEngine = False
             try:
                 if echo: print('No SQL connection, attempting to create connection engine...')
-                checkManifest.connectSQL()
+                self.connectSQL()
                 if echo: print('Connection engine created')
             except Exception as e:
                 skipEngine = True
