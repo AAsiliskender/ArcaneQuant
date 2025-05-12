@@ -25,7 +25,7 @@ addopts = "-ra"
 current_version = "0.1.2"
 commit = true
 tag = true
-tag_name = "v{new_version}"
+tag_name = "[{new_version}] - {now:%Y-%m-%d}"
 tag_message = "Bump version: {current_version} → {new_version}"
 changelog = true
 
@@ -49,3 +49,9 @@ regex = true
 
 [tool.changelog_gen]
 current_version = "0.1.2"
+version_string = "{new_version}"
+reject_empty = true
+allowed_branches = [
+    "main",
+]
+date_format = "%Y-%m-%d"
