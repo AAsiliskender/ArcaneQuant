@@ -1,6 +1,6 @@
 [project]
 name = "arcanequant"
-version = "0.0.1"
+version = "0.1.0"
 description = "A framework for algorithmic and high-frequency trading"
 authors = [{ name = "Ahmed Asiliskender", email = "ahmedasiliskender@gmail.com" }]
 readme = "README.md"
