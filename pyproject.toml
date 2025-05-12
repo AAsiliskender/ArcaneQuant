@@ -1,8 +1,9 @@
 [project]
 name = "arcanequant"
-version = "0.1.1"
+
 description = "A framework for algorithmic and high-frequency trading"
 authors = [{ name = "Ahmed Asiliskender", email = "ahmedasiliskender@gmail.com" }]
+maintainers = [{ name = "Ahmed Asiliskender", email = "ahmedasiliskender@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -22,6 +23,7 @@ addopts = "-ra"
 
 
 [bumpversion]
+current_version = "0.1.1"
 commit = true
 tag = true
 tag_name = "v{new_version}"
@@ -45,3 +47,6 @@ filename = "CHANGELOG.md"
 search = "^# Changelog\n\n"
 replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n- TODO: Describe changes\n\n"
 regex = true
+
+[tool.changelog_gen]
+current_version = "0.1.1"
