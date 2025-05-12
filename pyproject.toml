@@ -38,9 +38,11 @@ allow_dirty = false
 regex = true
 commit_args = ""
 
-[bump-my-version:file:pyproject.toml]
+[[tool.bump-my-version.files]]
+filename = "pyproject.toml"
 
-[bump-my-version:file:CHANGELOG.md]
-search = "^## \[{current_version}\].*$"
-replace = "## \[{new_version}\] - {date}"
+[[tool.bump-my-version.files]]
+filename = "CHANGELOG.md"
+search = "{current_version}...HEAD"
+replace = "{current_version}...{new_version}"
 regex = true
