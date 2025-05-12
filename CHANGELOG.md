@@ -1,5 +1,7 @@
 # Changelog
 
+## v0.1.2
+
 ## [0.1.0] - 2025-05-12
 - Added SQL optionality
 - Cleanup of existing code
