@@ -21,6 +21,7 @@ pythonpath = ["."]
 addopts = "-ra"
 
 
+[bumpversion]
 
 
 
