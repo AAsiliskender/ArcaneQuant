@@ -22,7 +22,7 @@ addopts = "-ra"
 
 
 [bumpversion]
-current_version = "0.0.1"
+
 commit = true
 tag = true
 tag_name = "v{new_version}"
