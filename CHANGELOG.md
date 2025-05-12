@@ -1,6 +1,7 @@
 # Changelog
 
-## v0.1.2
+## [0.1.1] - 2025-05-12
+- Implemented version bumping
 
 ## [0.1.0] - 2025-05-12
 - Added SQL optionality

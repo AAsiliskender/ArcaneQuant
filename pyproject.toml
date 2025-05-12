@@ -22,7 +22,7 @@ addopts = "-ra"
 
 
 [bumpversion]
-current_version = "0.1.2"
+current_version = "0.1.1"
 commit = true
 tag = true
 tag_name = "[{new_version}]"
@@ -46,7 +46,7 @@ replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n- TODO: Describe 
 regex = true
 
 #[tool.changelog_gen]
-#current_version = "0.1.2"
+#current_version = "0.1.3"
 #version_string = "{new_version}"
 #reject_empty = true
 #allowed_branches = [
