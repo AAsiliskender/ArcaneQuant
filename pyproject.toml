@@ -23,19 +23,19 @@ addopts = "-ra"
 
 [bumpversion]
 current_version = "0.0.1"
-commit = True
-tag = True
+commit = true
+tag = true
 tag_name = "v{new_version}"
 tag_message = "Bump version: {current_version} → {new_version}"
-changelog = True
+changelog = true
 
 
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
-ignore_missing_version = False
-sign_tags = False
-allow_dirty = False
-regex = True
+ignore_missing_version = false
+sign_tags = false
+allow_dirty = false
+regex = true
 commit_args = ""
 
 [bump-my-version:file:pyproject.toml]
@@ -43,4 +43,4 @@ commit_args = ""
 [bump-my-version:file:CHANGELOG.md]
 search = "^## \[{current_version}\].*$"
 replace = "## \[{new_version}\] - {date}"
-regex = True
+regex = true
