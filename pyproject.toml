@@ -42,7 +42,7 @@ filename = "pyproject.toml"
 [[tool.bumpversion.files]]
 filename = "CHANGELOG.md"
 search = "^# Changelog\n\n"
-replace = "# Changelog\n\n## [{new_version}] - {date}\n- TODO: Describe changes\n\n"
+replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n- TODO: Describe changes\n\n"
 regex = true
 
 #[tool.changelog_gen]
