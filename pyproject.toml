@@ -36,13 +36,13 @@ allow_dirty = false
 regex = true
 commit_args = ""
 
-[[tool.bump-my-version.files]]
+[[tool.bumpversion.files]]
 filename = "pyproject.toml"
 
-[[tool.bump-my-version.files]]
+[[tool.bumpversion.files]]
 filename = "CHANGELOG.md"
 search = "^# Changelog\n\n"
-replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n- TODO: Describe changes\n\n"
+replace = "# Changelog\n\n## [{new_version}] - {date}\n- TODO: Describe changes\n\n"
 regex = true
 
 #[tool.changelog_gen]
