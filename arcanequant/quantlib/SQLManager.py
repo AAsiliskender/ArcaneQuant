@@ -1,7 +1,7 @@
 
 # MAKING CODE HERE TO SUBSTITUTE INTO PANDAS AS ID FOR RELATIONAL TABLES
 
-# THINKING OF ADDING ATTRIBUTES SELF.RELATION.TICKER/MANIFEST/CALENDAR/ID
+# THINKING OF ADDING ATTRIBUTES SELF.RELATION.TICKER/MANIFEST/CALENDAR/ID (TO DATAMANAGER)
 
 class SQLManager():
     """Placeholder class for package-level structure or future use."""
@@ -13,6 +13,52 @@ class SQLManager():
 # We modify table to remove unnecessary columns or rows, then add to database (replace or append)
 # Then we set the datatype of columns and set the primary keys.
 
+# Repair SQL table/keys/data
+def SQLRepair(dataManifest = None, connEngine = None, dataRepair = True, echo = False):
+    """
+    Repairs SQL system by remaking all keys (and tables as needed) on a database, and resyncing data to SQL if possible.
+    
+    Optional Inputs:
+    - dataManifest - DataManifest type, to connect to database (dataManifest should have an existing SQLengine attribute)
+    and to re-sync to database (if the optional directory attribute exists).
+    - connEngine - Connection to SQL database to repair
+    - dataRepair - Boolean indicating if the data also needs to be repaired (by deleting the SQL dataset and re-syncing
+    from the .csv dataset)
+    - echo - Echo output/actions from function
+    
+    Note:
+    - At least one of dataManifest or connEngine must be provided
+    - The database is indicated by the connection engine within dataManifest (dataManifest.SQLengine), or optionally by
+    a directly provided engine through connEngine. If both inputs are given (and dataManifest.SQLengine exists),
+    dataManifest is preferentially used. If dataManifest has a directory attribute, after repairing the SQL database, the
+    data manifest is validated (to make sure there are no missing files), and then used to resync data files to the SQL
+    database.
+    If issues arise from syncing .csv data directly to SQL (due to existing data in SQL), enable dataRepair to clear (or
+    clear manually using SQLDelete).
+    """
+    import sqlalchemy.exc as sqlexc
+    # Selecting engine to use
+    if dataManifest.SQLengine:
+        connEngine = dataManifest.SQLengine
+    elif not connEngine:
+        raise ValueError("You must provide a connection engine through dataManifest.SQLengine or connEngine")
+
+    # Set all keys and establish relational database
+    print(f'Repairing SQL database using connection engine {connEngine}...')
+    try:
+        print('Attempting to drop and reset all keys to recreate the relational database without deleting tables')
+        SQLSetup(connEngine, new = False)
+
+    except sqlexc.ProgrammingError: # If any table is missing (none should ever be missing), recreate all tables from scratch, then set keys
+        if echo: print('Table(s) missing, recreating all tables before repair...')
+        SQLSetup(connEngine, new = True)
+
+    # At the end, sync SQL with .csv files (if dataManifest has a directory provided (i.e. a file storage location))
+    if dataManifest.directory:
+        SQLSync(dataManifest, not dataRepair, echo)
+
+    
+    return
 
 
 # Method to provide query for setting key(s) for a table (after dropping existing one first)
@@ -60,7 +106,6 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None, 
     ### Check first key type, then confirm key input (string or iterable of string)
     # Guard function against bad input (guarantees string or iterable of string)
     if not all(isinstance(key, str) for key in keys): raise KeyError("All keys must be in string")
-    
     
     if kType.lower() == 'primary': # Create primary/composite key
         addkeys = ""
@@ -247,8 +292,6 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None, 
     else:
         # Guard function against bad input
         raise KeyError("Inputted key type (kType) must be 'primary', 'foreign', 'unique' or 'secondary'.")
-    
-
 
     # Execute alteration
     if engine:
@@ -436,7 +479,6 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
         # Guard function against bad input
         raise KeyError("Inputted key type (kType) must be 'primary', 'foreign', 'unique' or 'secondary'.")
     
-    
     if engine:
         if echo: print('Committing key drop')
         ExecuteSQL(wallstring, engine)
@@ -459,7 +501,6 @@ def postgres_upsert(table, conn, keys, data_iter):
     from sqlalchemy.dialects.postgresql import insert
 
     conststr = f"{table.table.name}_pkey"
-    print(conststr)
 
     data = [dict(zip(keys, row)) for row in data_iter]
 

@@ -8,9 +8,11 @@ import sqlalchemy.exc as sqlexc
 from arcanequant.quantlib.DataManifestManager import DataManifest
 from arcanequant.quantlib.SQLManager import SetKeysQuery, DropKeysQuery
 
-########################################################################################
-################################  SET KEYS QUERY TEST  #################################
+################################################################
+#####################  SET KEYS QUERY TEST  ####################
+################################################################
 
+################ TEST QUERY AND EXPECTED RESULTS ###############
 ### Primary key
 groundPS1 = """
                         ALTER TABLE "testTable1"
@@ -123,6 +125,7 @@ testSCS1 = ('testTable1', ('Int','BigInt'), 'secondary', None, groundSCS1)
 
 querySetKeysTest = [testPS1, testCS1, testUS1, testCUS1, testSFS1, testSCFS1, testMFS1, testMCFS1, testMCFS1_NC, testSS1, testSCS1]
 
+######################### TEST FUNCTION ########################
 
 @pytest.mark.parametrize("tableName,keys,kType,ref,expected", querySetKeysTest)
 def test_SetKeysQuery_generator(tableName,keys,kType,ref,expected):
@@ -135,12 +138,12 @@ def test_SetKeysQuery_generator(tableName,keys,kType,ref,expected):
     print('Testing SetKeysQuery Function...')
     assert SetKeysQuery(tableName,keys,kType,ref) == expected
 
-########################################################################################
-########################################################################################
 
-########################################################################################
-################################  DROP KEYS QUERY TEST  ################################
+################################################################
+####################  DROP KEYS QUERY TEST  ####################
+################################################################
 
+################ TEST QUERY AND EXPECTED RESULTS ###############
 ### Primary key
 groundPD1 = """
                         ALTER TABLE "testTable1"
@@ -227,6 +230,7 @@ testSCD1 = ('testTable1', ('Int','BigInt'), 'secondary', None, groundSCD1)
 
 queryDropKeysTest = [testPD1, testCD1, testUD1, testCUD1, testSFD1, testSCFD1, testMFD1, testMCFD1, testMCFD1_NC, testSD1, testSCD1]
 
+######################### TEST FUNCTION ########################
 @pytest.mark.parametrize("tableName,keys,kType,ref,expected", queryDropKeysTest)
 def test_DropKeysQuery_generator(tableName,keys,kType,ref,expected):
     """
@@ -238,5 +242,4 @@ def test_DropKeysQuery_generator(tableName,keys,kType,ref,expected):
     print('Testing DropKeysQuery Function...')
     assert DropKeysQuery(tableName,keys,kType,ref) == expected
 
-########################################################################################
-########################################################################################
+#########################

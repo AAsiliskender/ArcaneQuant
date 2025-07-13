@@ -7,27 +7,25 @@ import requests
 
 # CREATE A COMPRESSED MANIFEST (YEARS AND STOCKS ONLY, 2 INDICATES AN INCOMPLETE POINT (I.E. NOT ALL MONTHS OR NOT ALL INTERVALS)
 
-# Convert scrape Data to a multiindex DF
-
-# USING SQL FOR ETL
-# HAVE A METHOD TO ETL THE DATA, AND HAVE LOAD FUNCTION FOR DATABASE AND FOR CSV FILES, VALIDATION IS STILL DONE ONLY VIA CSV FILES
+# VALIDATION IS STILL DONE ONLY VIA CSV FILES
 # MAYBE CAN EXTEND VALIDATION TO RELY ALSO ON DATABASE (AND MAYBE HAVE A MANIFEST TABLE IN DATABASE?)
-# DATABASE WILL HAVE ALL THE MONTHLY DATA (OF ONE TIME RESOLUTION) IN ONE TABLE FOR EASE WHEN ANALYSING DATA. WHAT WILL THE PRIMARY/FOREIGN KEY BE?
-# DATABASE WILL TAKE INTO ACCOUNT TIMEZONE FOR TIMESTAMP DATA
-# MAYBE CAN FILTER FOR MONTH/DATES WITHOUT SPLITTING TIMESTAMP INTO COMPONENTS (OTHERWISE MAYBE I CAN FIND A EASY WORKAROUND)
-# WILL NEED TO HAVE CODE TO CONVERT DATABASE TABLE TO DATAFRAME FORM SMOOTHLY (I.E. NO CHANGE IN COLUMN NAMES, DATATYPES ETC.)
 
-# NEED TO HAVE SAVE AS SQL OR JSON OPTIONS
+# MODIFY DOWNLOADINTRADAY TO ADD SAVE SETTING (SAVE AS SQL OR JSON OPTIONS, AND MAYBE ADD CSV OPTION)
 
-# CONSIDERING TIMEZONE CASTING (FOR LATER)
+# CONSIDERING TIMEZONE CASTING (FOR LATER) - FUNCTION NAMED CONTEXTUALISE (I.E. USING THE META DATA)?
 
 # CREATE DATAMANAGER FILE/CLASS TO MANAGE DATA SPECIFICALLY (RATHER THAN JUST MANIFEST OR MANIFEST-RELATED STUFF)
+# SHOULD CONTAIN DOWNLOAD INTRADAY AND EXTRACT DATA (CAN ALSO HAVE SAVE DATA WHICH POINTS TO SQLSAVE OR SAVECSV)
+# MAKE A FUNCTION TO SAVE A FILE TO CSV? (WITH ADDITIONAL PARAMETERS? CURRENTLY NOTHING TO CALL TO SAVE TO CSV)
+
+# ADD CODE TO STITCH TOGETHER SPECIFIC DATA PARTS FROM DIFFERENT SETS FOR ANALYSIS (CORRELATION ETC.)
+# ADD CODE TO DIRECTLY API CALL POST-PROCESS DATA (TECH INDICATORS) (ALSO MAKE CODE TO PROCESS IN HOUSE IF DESIRED)
+# WILL NEED CODE TO ASSESS ANY STOCKSPLIT INFORMATION AND EITHER MARK FOR RENEW DATA FROM API OR EDIT EXISTING DATA AS NEEDED
 
 # Placeholder class for file name and package importing
 class DataManifestManager():
     """Placeholder class for package-level structure (or possibly also future use)."""
     pass
-
 
 
 ##################################
@@ -60,39 +58,53 @@ class DataManifest():
     """
         
     def __init__(self):
-        self.DF = pd.DataFrame(index = pd.MultiIndex(levels = [[],[]], codes = [[],[]], names=['Stocks','Interval']), columns = pd.Index(data = [],name = 'Month'))
+        self.DF = pd.DataFrame(index = pd.MultiIndex(levels = [[],[]], codes = [[],[]], names=['Ticker','Interval']), columns = pd.Index(data = [],name = 'Month'))
          # TODO: CHECK VALIDITY OF SHORTFORM MANIFEST
-        self.DFshort = pd.DataFrame(index = pd.Index(data = [],name = 'Stocks'), columns = pd.Index(data = [],name = 'Month'))
+        self.DFshort = pd.DataFrame(index = pd.Index(data = [],name = 'Ticker'), columns = pd.Index(data = [],name = 'Month'))
         self.directory = None
         self.fileName = 'dataManifest'
         self.SQLengine = None
         
         print('Data Manifest Initialised')
 
+    def __str__(self):
+        return f'DataManifest with filename "{self.fileName}" of directory "{self.directory}" and SQL engine {self.SQLengine}.'
+
+    def __repr__(self):
+        return f'DataManifest(fileName = {self.fileName}, directory = {self.directory}, SQLengine = {self.SQLengine}). DF dimensions: {self.DF.shape}'
 
     # Validate Manifest Data (check if file exists, add to manifest or set to 1, else set to 0 or remove)
-    def validateManifest(self, fullValidate = False, echo = True):
-        """This method validates the DataManifest's DataFrame.
+    def validateManifest(self, fastValidate = True, echo = True):
+        """
+        This method validates the DataManifest's DataFrame.
         This is done by comparing the stated intraday data file's presence (or lack thereof) in the DataManifest's indicated directory path.
-        The files are expected to be named as "{ticker}_{interval}_{month}.csv" where month is YYYY-MM ("2025-01")"""
+        The files are expected to be named as "{ticker}_{interval}_{month}.csv" where month is YYYY-MM ("2025-01").
+        
+        Input:
+        - fastValidate - Boolean, indicates if fast validation method is to be used.
+        - echo - Boolean, indicating verbosity of method.
+
+        Notes:
+        - fastValidate works by only considering the entries which are stated as 1 or 2 (exists). This is because the
+        ignored entries (set as 0) can be redownloaded later anyways (i.e. when user wants to obtain data for 0 entries).
+        """
         print('Validating data manifest DataFrame.')
         
-        if fullValidate: print('Conducting full validation.')
+        if fastValidate: print('Conducting fast validation.')
         invalidpoints=[0,0] # Left is invalid, right is total
         # Here we need to separate the stock values, and for each, separate the interval value.
         # For each of these, check if the file exists:
-        # If fullValidate, for every month entry, and set the value accordingly
-        # Otherwise, for only the month entries which are stated as 1 (exists).
-        # This is because ignored files (set to 0) will be redownloaded anyways.
+        # If fastValidate, for only the entries which are stated as 1 (exists).
+        # This is because ignored files (set to 0) will be redownloaded (or searched if exists) later anyways.
+        # Otherwise, for every month entry, and set the value accordingly.
         
         # Unique values of symbols (ticker)
         symbolComponents = list(self.DF.index.get_level_values(0).unique().values)
         # We get these now since it doesn't change across tickers or intervals
         monthComponents = list(self.DF.columns.values)
-        totalmonthCount = len(monthComponents)
         
         for symbol in symbolComponents:
-            symbolSection = self.DF[(self.DF.index.get_level_values('Stocks') == symbol)]
+            symbolSection = self.DF[(self.DF.index.get_level_values('Ticker') == symbol)]
             # Will try for each interval list in each ticker set (to avoid having to catch errors)
             intervalComponents = list(symbolSection.index.get_level_values(1).unique().values) 
             
@@ -123,8 +135,8 @@ class DataManifest():
                         else:
                             if echo: print('File ' + fileString + ' found.')
                         
-                    elif fileValue == 0 and fullValidate:
-                        # Check if file does NOT exist if value zero AND full validate is on.
+                    elif fileValue == 0 and not fastValidate:
+                        # Check if file does NOT exist if value zero AND fastValidate is off.
                         # Extra lines but more efficient
                         invalidpoints[1] += 1 # Adding to no. of tested datapoints
                         try:
@@ -144,9 +156,13 @@ class DataManifest():
 
     # Method to create and link an SQL connection engine and link to class instance
     def connectSQL(self, dbcred = 'SQLlogin'):
-        """Creates connection engine and links to class instance (self.SQLengine) for the database given the requisite details.
+        """
+        Creates connection engine and links to class instance (self.SQLengine) for the database given the requisite details.
         You must have already set up SQL and a database to use this functionality.
-        dbcred is the name of the file containing the details.
+
+        Input:
+        - dbcred is the name of the file (string, not including file extension) containing the connection details.
+
         The file must be an .env file with the following keys:
         DRIVER - the software dealing with the database
         DIALECT - the specific language specification for SQL (i.e. MySQL or PostgreSQL)
@@ -155,7 +171,7 @@ class DataManifest():
         HOST_MACHINE - the machine to connect to (containing the database)
         DBNAME - name of the database (must already exist)
 
-        The .env is normally readily creatable/editable if file extensions can be changed manually.
+        The .env is normally readily creatable/editable if file extensions can be changed manually by the user.
 
         Example:
         DRIVER=psycopg2:
@@ -166,8 +182,6 @@ class DataManifest():
         PORT=5432
         DBNAME=databasename
         """
-        from sqlalchemy import create_engine
-        from pathlib import Path
 
         env_path = Path(".") / f"{dbcred}.env" # Environment variables file must be same folder as this code
         load_dotenv(dotenv_path=env_path, override=True)
@@ -217,7 +231,7 @@ class DataManifest():
         uniqueSymbols = list(self.DF.index.get_level_values(0).unique().values)
         uniqueMonths = list(self.DF.columns.values)
         
-        symbolSection = self.DF[(self.DF.index.get_level_values('Stocks') == ticker)]
+        symbolSection = self.DF[(self.DF.index.get_level_values('Ticker') == ticker)]
         uniqueIntervals = list(symbolSection.index.get_level_values(1).unique().values) 
 
         isnewRowCol = False
@@ -229,23 +243,35 @@ class DataManifest():
         if isnewRowCol: self.DF.fillna(int(0), inplace=True)
 
         if sort: # Sort before updating
-            self.DF.sort_values(by=['Stocks','Interval'], inplace=True)
+            self.DF.sort_values(by=['Ticker','Interval'], inplace=True)
             self.DF.sort_values(by=['Month'], axis=1, inplace=True)
         
         return
 
     # Method to load .csv market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromcsv(self, ticker, interval, month, echo = True):
+    def loadData_fromcsv(self, ticker, interval, month, convert_DateTime = False, echo = True):
         """ This method loads a .csv file of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
         The method assumes the file naming format "{ticker}_{interval}_{month}.csv" where month is YYYY-MM ("2025-01") on the .csv files 
         The method returns the data frame of stock data.
+
+        Input:
+        - ticker - string of ticker name (i.e. "NVDA")
+        - interval - int of interval value (time gap between datapoints)
+        - month - string of the year and month of the period (in YYYY-MM format, i.e. "2025-01")
+
+        Optional inputs:
+        - convert_DateTime - Boolean indicating to read the DateTime column as datetime64 type (or as a string)
+        - echo - Boolean that provides more output during execution.
         """
-        if not isinstance(self.directory, str): raise DirectoryError('The data manifest directory pointer must be to a valid path/folder.')
+        if not isinstance(self.directory, str): raise TypeError('The data manifest directory pointer must be a string pointing to a valid path/folder.')
         
         fileString = r'' + ticker + "_" + str(interval) + "_" + month
         if echo: print(rf"Loading file data: {fileString}.csv")
         
         fileRead = pd.read_csv(rf"{self.directory}{ticker}/{fileString}.csv")
+        # Convert datetime column from string to datetime64
+        if convert_DateTime:
+            fileRead['DateTime'] = pd.to_datetime(fileRead['DateTime'], format = "%Y-%m-%d %H:%M:%S")
 
         return fileRead
 
@@ -256,7 +282,7 @@ class DataManifest():
         The method returns the data frame of stock data.
         """
         
-        fileRead=0
+        fileRead=0 # TO DELETE OR COMPLETE
 
         return fileRead
     
@@ -265,7 +291,7 @@ class DataManifest():
         """This method saves the DataFrame in the DataManifest class into a file with the given directory.
         The save format is .json"""
         
-        if not isinstance(path, str): raise PathError('You must provide a valid path to save or load.')
+        if not isinstance(path, str): raise TypeError('You must provide a valid path to save or load.')
         
         if echo: print('Saving Manifest Data')
         
@@ -276,7 +302,7 @@ class DataManifest():
         if echo: print('Save path/name: ' + filepath)
         
         # Sort before saving
-        self.DF.sort_values(by=['Stocks','Interval'], inplace=True)
+        self.DF.sort_values(by=['Ticker','Interval'], inplace=True)
         self.DF.sort_values(by=['Month'], axis=1, inplace=True)
         
         manifestJSON = self.DF.to_json()
@@ -315,7 +341,7 @@ class DataManifest():
     def loadManifest(self, path, echo = True):
         """This method loads up a manifest file into the DataManifest class' DataFrame attribute."""
     
-        if not isinstance(path, str): raise PathError('You must provide a valid path to save or load.')
+        if not isinstance(path, str): raise TypeError('You must provide a valid path to save or load.')
         
         if echo: print('Loading Manifest Data')
 
@@ -340,7 +366,7 @@ class DataManifest():
         indexlist=[literal_eval(x) for x in self.DF.index]
         
         # Change index from fake tuple into MultiIndex (and rename index axes) 
-        self.DF.index = pd.MultiIndex.from_tuples(indexlist,names=['Stocks','Interval'])
+        self.DF.index = pd.MultiIndex.from_tuples(indexlist,names=['Ticker','Interval'])
         
         # Rename the column axis to Month
         self.DF.rename_axis("Month",axis=1,inplace = True)
@@ -364,7 +390,6 @@ class DataManifest():
 
 ##################################
 ##################################
-
 
 ##################################
 ##################################
@@ -459,6 +484,7 @@ def DownloadIntraday(path, tickers, intervals, months, APIkey, verbose = False):
                         # Converting the dictionary form to DataFrame
                         scrapeDF = pd.DataFrame.from_dict(data, orient='columns')
                         print(scrapeDF)
+                        
                         # This DF contains both meta data and actual data, must split them up first
                         datalabel = f'Time Series ({interval}min)' # To get the header of the actual data
                         
@@ -470,7 +496,7 @@ def DownloadIntraday(path, tickers, intervals, months, APIkey, verbose = False):
                         dataDF = pd.DataFrame(list(dataDF[datalabel]))
                         dataDF['DateTime'] = dateTimeCol
         
-                        dataDF.rename(columns={'1. open' : 'Open', '2. high' : 'High', '3. low' : 'Low', '4. close' : 'Close', '5. volume' : 'Volume'},inplace=True)
+                        dataDF.rename(columns={'1. open' : 'Open', '2. high' : 'High', '3. low' : 'Low', '4. close' : 'Close', '5. volume' : 'Volume'}, inplace=True)
                         dataDF = dataDF[['DateTime','Open','High','Low','Close','Volume']] # Reordering columns
         
                         # Show meta and actual data (if show enabled)

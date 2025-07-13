@@ -7,15 +7,6 @@
 
 # All other functions used for DataManifest - SQL interaction are derived from functions/methods used here  
 
-#### TEST SETUP COMMANDS (ONCE)
-# SQL commands to create test user with necessary functions to be able to run tests
-# This set of code needs to run only once on setup
-# """
-#    CREATE USER "testUser" 
-#    ALTER USER "testUser" WITH PASSWORD 'testPassword';
-#    ALTER DATABASE "testDatabase" OWNER TO "testUser";
-# """
-
 # Packages
 import pytest
 import pandas as pd
@@ -31,87 +22,21 @@ from arcanequant.quantlib.DataManifestManager import DataManifest
 from arcanequant.quantlib.SQLManager import ExecuteSQL, SetKeysQuery, DropKeysQuery
 
 # need sqlalchemy (and docker imports, after learning to set up docker)
-#DROP TABLE IF EXISTS \"testTable1\" CASCADE;
-testquery = f"""
-                    CREATE TABLE \"testTable1\" (
-                        \"Time\" TIME NOT NULL,
-                        \"TimeID\" INT GENERATED ALWAYS AS (
-                            (extract(hour FROM \"Time\") * 10000) + 
-                            (extract(minute FROM \"Time\") * 100) + 
-                            extract(second FROM \"Time\")
-                            ) STORED,
-                        \"Hour\" INT GENERATED ALWAYS AS ( extract(hour FROM \"Time\") )STORED,
-                        \"Minute\" INT GENERATED ALWAYS AS ( extract(minute FROM \"Time\") )STORED,
-                        \"Second\" INT GENERATED ALWAYS AS ( extract(second FROM \"Time\") )STORED
-                    );
-
-                    INSERT INTO \"testTable1\" (\"Time\")
-                    SELECT generate_series('1900-01-01 00:00:00'::TIMESTAMP, '1900-01-01 00:01:00'::TIMESTAMP, '10 second'::INTERVAL)::TIME;
-                    """
-
-sql_expected = """+----------+----------+--------+----------+----------+
-| Time     |   TimeID |   Hour |   Minute |   Second |
-|----------+----------+--------+----------+----------|
-| 00:00:00 |        0 |      0 |        0 |        0 |
-| 00:00:10 |       10 |      0 |        0 |       10 |
-| 00:00:20 |       20 |      0 |        0 |       20 |
-| 00:00:30 |       30 |      0 |        0 |       30 |
-| 00:00:40 |       40 |      0 |        0 |       40 |
-| 00:00:50 |       50 |      0 |        0 |       50 |
-| 00:01:00 |      100 |      0 |        1 |        0 |
-+----------+----------+--------+----------+----------+"""
-
-pd_expected = [[dt_time(0), 0, 0, 0, 0],
- [dt_time(0, 0, 10), 10, 0, 0, 10],
- [dt_time(0, 0, 20), 20, 0, 0, 20],
- [dt_time(0, 0, 30), 30, 0, 0, 30],
- [dt_time(0, 0, 40), 40, 0, 0, 40],
- [dt_time(0, 0, 50), 50, 0, 0, 50],
- [dt_time(0, 1), 100, 0, 1, 0]]
-
-testParams = [('Pandas', testquery, pd_expected), ('Direct', testquery, sql_expected)]
-
-# The result is read by using SQLAlchemy connect_engine provided connection, and separately using pandas
-@pytest.mark.parametrize("testFrom,queryinput,expected", testParams)
-def test_ExecuteSQL(testFrom, queryinput, expected, setup_SQLtestengine):
-
-    ExecuteSQL(queryinput, setup_SQLtestengine)
-
-    # Extract what the table should look like and compare to what it should be
-    # For example, from SQL its a string of the table appearance and contents
-    # From Pandas it is the values within the table being checked
-    with setup_SQLtestengine.connect() as conn:
-        if testFrom == 'Pandas':
-            result = pd.read_sql_query("SELECT * FROM \"testTable1\";", conn)
-            assert result.values.tolist() == expected
-            
-        
-        elif testFrom == 'Direct':
-            extract = conn.execute(text("SELECT * FROM \"testTable1\";"))
-
-            rows = extract.fetchall()  # Fetch all rows
-            headers = extract.keys() # Fetch all headers
-
-            result = tabulate(rows, headers=headers, tablefmt="psql")
-            assert result == expected
 
 ################################################################
 ##################### FULL INTEGRATION TEST ####################
 ################################################################
-#### CONSIDER PUTTING QUERY AND EXPECTED INTO JSON/YAML FOR CLEANLINESS
 # Test by:
 # Using some valid inputs twice (check for if exists removal error, should not happen)
 # Setting a column as foreign of another key (which has a different datatype)
 # Removing keys, leaving few remaining and check for their existence before teardown
 # Check the output (query) is valid by comparing the output string with a preverified string
 
-################################################################
 ################ TEST QUERY AND EXPECTED RESULTS ###############
-################################################################
-# Note: we test for each remaining constraints. We added 6 non-composite and 8 composite uniques from testTable1 to testTable3
-# for a total of 14, and removed 7 uniques, one from testTable1 (already non-existent), so there
-# should be 8 remaining unique keys across all tables. There should only be one remaining primary
-# key, foreign key, and secondary key.
+# Note: we test for each remaining constraints. We added 6 non-composite and 8 composite uniques
+# from testTable1 to testTable3 for a total of 14, and removed 7 uniques, one from testTable1
+# (already non-existent), so there should be 8 remaining unique keys across all tables. There
+# should only be one remaining primary key, foreign key, and secondary key.
 
 # Also, we test for where primary keys were used by checking which columns for which tables are
 # nullable (as primary keys enforce non-nullability).
@@ -452,6 +377,7 @@ testIntegrationInput = [(
     (nullQuery1, nullExpected1), (nullQuery2, nullExpected2), (nullQuery3, nullExpected3)
     )]
 
+######################### TEST FUNCTION ########################
 @pytest.mark.parametrize("testIntegrationParams", testIntegrationInput)
 def test_SQLIntegration(testIntegrationParams, setup_SQLtestengine):
     """
@@ -603,24 +529,5 @@ def test_SQLIntegration(testIntegrationParams, setup_SQLtestengine):
             result = tabulate(rows, headers = headers, tablefmt="psql")
 
             assert result == testParam[1], f"Expected {testParam[1]} but got {result}"
-
+            
 #########################
-
-@pytest.fixture(scope = 'function')
-def setup_SQLtestengine() -> Engine:
-    # Setup
-    setupManifest = DataManifest()
-    setupManifest.connectSQL('testSQLlogin')
-
-    try: # Used to teardown no matter the error/failure
-        yield setupManifest.SQLengine
-    finally:
-        # Teardown
-        teardownquery = f"""
-                            DROP TABLE IF EXISTS \"testTable1\" CASCADE;
-                            DROP TABLE IF EXISTS \"testTable2\" CASCADE;
-                            DROP TABLE IF EXISTS \"testTable3\" CASCADE;
-                        """
-        with setupManifest.SQLengine.connect() as conn:        
-            teardown = conn.execute(text(teardownquery))
-            conn.commit()
