@@ -10,16 +10,18 @@
 # Packages
 import pytest
 import pandas as pd
-from datetime import time as dt_time
 from tabulate import tabulate
 import psycopg2
-from sqlalchemy import create_engine, Engine, text
+import sqlalchemy
+from sqlalchemy import text
 import sqlalchemy.exc as sqlexc
 from sqlalchemy import types as sqltype
+
 
 # My packages
 from arcanequant.quantlib.DataManifestManager import DataManifest
 from arcanequant.quantlib.SQLManager import ExecuteSQL, SetKeysQuery, DropKeysQuery
+from test_SQLExecution import setup_SQLtestengine
 
 # need sqlalchemy (and docker imports, after learning to set up docker)
 
@@ -379,7 +381,7 @@ testIntegrationInput = [(
 
 ######################### TEST FUNCTION ########################
 @pytest.mark.parametrize("testIntegrationParams", testIntegrationInput)
-def test_SQLIntegration(testIntegrationParams, setup_SQLtestengine):
+def test_SQLIntegration(testIntegrationParams, setup_SQLtestengine: sqlalchemy.engine):
     """
     Tests the codebase-Pandas-SQLAlchemy-SQL setup fully integrated by using test engine created
     using my DataManifest class, as well as pandas to initialise a SQL table, and then use SetKeysQuery

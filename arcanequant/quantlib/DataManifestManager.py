@@ -1,8 +1,15 @@
-import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
 import os
+from io import StringIO
+from ast import literal_eval
+from datetime import datetime
+import json
+import pandas as pd
+import sqlalchemy
+from sqlalchemy import create_engine, text
 import requests
+from typing import Iterable
 
 
 # CREATE A COMPRESSED MANIFEST (YEARS AND STOCKS ONLY, 2 INDICATES AN INCOMPLETE POINT (I.E. NOT ALL MONTHS OR NOT ALL INTERVALS)
@@ -22,6 +29,9 @@ import requests
 # ADD CODE TO DIRECTLY API CALL POST-PROCESS DATA (TECH INDICATORS) (ALSO MAKE CODE TO PROCESS IN HOUSE IF DESIRED)
 # WILL NEED CODE TO ASSESS ANY STOCKSPLIT INFORMATION AND EITHER MARK FOR RENEW DATA FROM API OR EDIT EXISTING DATA AS NEEDED
 
+# ADD SAVEDATA_SQL - LOADS A FILE FROM CSV AND SAVES INTO SQL.
+# MAY NEED TO REMOVE LOADDATA_FROMSQL 
+
 # Placeholder class for file name and package importing
 class DataManifestManager():
     """Placeholder class for package-level structure (or possibly also future use)."""
@@ -36,9 +46,12 @@ class DataManifest():
     Data Manifests show in a readable format the set of data that exists in the directory the file is in.
     This allows for easier downloading of missing data as necessary.
     This class also has functions and methods to easily modify values as needed as well as verifying the presence of files.
-    The data represented by the manifest can be loaded from its .csv form or from its database (SQL) form.
-    The data manifest dataframe itself can be saved or loaded from .json form or from its database (SQL) form.
-    Note: Consider manifest size and data size (of the range of data you use), SQL is better at working with very large datasets.
+    The data represented by the manifest can be loaded from its .csv form or from its database (postgreSQL) form.
+    The data manifest dataframe itself can be saved or loaded from .json form or from its database (postgreSQL) form.
+    The individual data points (indicated in the manifest) can be saved to (SQL) database from here. 
+    Note:
+    - Consider manifest size and data size (of the range of data you use), SQL is better at working with very large datasets.
+    - To save all existing data to SQL (instead of one datapoint), use SQLSync from SQLManager.
     ---
     Value list:
     0 - No file exists
@@ -55,6 +68,7 @@ class DataManifest():
     - reduceManifest - Culls and rows and columns full of zeroes
     - loadData_fromcsv - Loads actual data (of point indicated in manifest) from .csv file
     - loadData_fromsql - Loads actual data (of point indicated in manifest) from database
+    - convertDataSQL - Loads actual data (of point indicated in manifest) and saves into SQL database
     """
         
     def __init__(self):
@@ -155,13 +169,15 @@ class DataManifest():
         return
 
     # Method to create and link an SQL connection engine and link to class instance
-    def connectSQL(self, dbcred = 'SQLlogin'):
+    def connectSQL(self, dbcred = 'SQLlogin', echo = False):
         """
         Creates connection engine and links to class instance (self.SQLengine) for the database given the requisite details.
         You must have already set up SQL and a database to use this functionality.
 
         Input:
-        - dbcred is the name of the file (string, not including file extension) containing the connection details.
+        - dbcred - String name of the file (not including file extension) containing the connection details.
+        Optional Input:
+        - echo - Boolean indicating method verbosity
 
         The file must be an .env file with the following keys:
         DRIVER - the software dealing with the database
@@ -209,7 +225,9 @@ class DataManifest():
     
     # Method to reduce manifest (remove completely 0 rows and columns)
     def reduceManifest(self):
-        """This method culls any rows and columns full of zeroes."""
+        """
+        This method culls any rows and columns full of zeroes.
+        """
         print('Culling manifest size')
 
         # Convert all zeroes to NaNs, and use dropna method, then re-fill with fillna(0)
@@ -222,9 +240,11 @@ class DataManifest():
         return
 
     # Method to update manifest (adds columns/index rows as necessary)
-    def setValue(self, ticker, interval, month, value, sort = True):
-        """ This method updates a value in the DataManifest's DataFrame.
-        The method adds columns/indices as necessary."""
+    def setValue(self, ticker: str, interval: int, month: str, value: int, sort = True):
+        """
+        This method updates a value in the DataManifest's DataFrame.
+        The method adds columns/indices as necessary.
+        """
         if value != 0 and value != 1 and value != 2: raise ValueError('Manifest values must be set to 0, 1 or 2')
 
         # If any of the symbol, interval (for the symbol) and month values are new, fill all NaNs as 0 in the new rows/cols
@@ -249,8 +269,9 @@ class DataManifest():
         return
 
     # Method to load .csv market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromcsv(self, ticker, interval, month, convert_DateTime = False, echo = True):
-        """ This method loads a .csv file of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
+    def loadData_fromcsv(self, ticker: str, interval: int, month: str, convert_DateTime = False, echo = True):
+        """
+        This method loads a .csv file of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
         The method assumes the file naming format "{ticker}_{interval}_{month}.csv" where month is YYYY-MM ("2025-01") on the .csv files 
         The method returns the data frame of stock data.
 
@@ -276,69 +297,103 @@ class DataManifest():
         return fileRead
 
     # Method to load database market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromsql(self, ticker, interval, month, echo = True):
-        """ This method loads a part of the database of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
-        The method assumes the postgreSQL information from []
+    def loadData_fromsql(self, ticker, interval, month, echo = False):
+        """
+        This method loads a part of the database of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
+        The method assumes the postgreSQL information from self.SQLengine
         The method returns the data frame of stock data.
         """
         
+
         fileRead=0 # TO DELETE OR COMPLETE
 
         return fileRead
     
+    def convertDataSQL(self, ticker, interval, month, echo = False):
+        pass # Move to DataManager (will convert to a SQL usable format (i.e. add ticker name and column if it does not exist)) (MAYBE NOT NEEDED)
+    
     # Method to save manifest data into file
-    def saveManifest(self, path, save = 'both', echo = True):
-        """This method saves the DataFrame in the DataManifest class into a file with the given directory.
-        The save format is .json"""
-        
-        if not isinstance(path, str): raise TypeError('You must provide a valid path to save or load.')
-        
-        if echo: print('Saving Manifest Data')
-        
+    def saveManifest(self, saveTo = 'both', savePath = "", echo = True):
+        """
+        This method saves the DataFrame in the DataManifest class. Two methods are available:
+        One saves into a file with the given directory in a .json format.
+        The second saves the manifest into SQL (requires engine).
+        Inputs:
+        - saveTo - String of the save option. Valid inputs are 'SQL', 'json' or 'both'
+        - path - String of the directory to save to (if empty, assumes present self.directory
+        as save path,)
+        - echo - Bool indicating method verbosity
+        Note:
+        - If path is empty, assumes present self.directory as save path, but if that is None
+        or "", then raises error.
+        - If saving to SQL, and no connection is possible, the method will skip SQL save but
+        will raise a notice.
+        """
 
-        # Update class-file link details
-        self.directory = path
-        filepath = rf"{path}{self.fileName}.json"
-        if echo: print('Save path/name: ' + filepath)
+        # Guard function against bad path input
+        if (not isinstance(savePath,str)) and (saveTo.lower() == 'json' or saveTo.lower() == 'both'):
+            raise ValueError('You must provide a valid path to save or load.')
+
+        # Update class-file link details (check for bad inputs first)
+        if saveTo.lower() == 'json' or saveTo.lower() == 'both':
+            # If savePath empty, set self.directory as savePath, otherwise do other way around
+            # If both empty then raise error first
+            if savePath == "" or savePath == None:
+                if self.directory == None or self.directory == "":
+                    raise ValueError('A path was not provided, and this DataManifest does not have a prior saved path. You must provide a path to save to.')
+                else:
+                    # Update in reverse, obtain from pre-existing self.directory
+                    savePath = self.directory
+            else:
+                # Update as the given savePath
+                self.directory = savePath
+
+        if echo: print('Saving Manifest Data')
         
         # Sort before saving
         self.DF.sort_values(by=['Ticker','Interval'], inplace=True)
         self.DF.sort_values(by=['Month'], axis=1, inplace=True)
-        
-        manifestJSON = self.DF.to_json()
-        
-        ### Saving is done after we have read the manifest so we don't lose any data
-        # Saving to .json file (always)
-        
-        # Using the with statement to avoid file close errors (though it shouldn't occur) for one-step changes
-        with open(filepath,"w") as manifestSave:
-            # Indent works if we use json.loads to change into dict as dump indents properly with that
-            # Works without indent but is not human-readable
-            readableJSON = json.loads(manifestJSON)
-            json.dump(readableJSON, manifestSave, indent = 4)
-            if echo: print(f"JSON saved successfully to {filepath}")
 
-        # Saving to SQL database (if possible)
-        # Save if the SQLengine is already established, if not try connect to SQL first
-        # If run into errors, cancel this operation
-        skipEngine = False
-        if self.SQLengine is None:
-            try:
-                if echo: print('No SQL connection, attempting to create connection engine...')
-                self.connectSQL()
-                if echo: print('Connection engine created')
-            except Exception as e:
-                skipEngine = True
-                print(f"An error occurred, skipping connection engine creation: {e}")
-                
-        if not skipEngine: # Run if engine already exists or just created 
-            self.DF.to_sql('manifest', self.SQLengine, if_exists='replace')
+        # Saving to .json
+        if saveTo.lower() == 'both' or saveTo.lower() == 'json':
+            filepath = rf"{savePath}{self.fileName}.json"
+            if echo: print('Save path/name: ' + filepath)
+
+            manifestJSON = self.DF.to_json()
+            
+            # Using the with statement to avoid file close errors (though it shouldn't occur) for one-step changes
+            with open(filepath,"w") as manifestSave:
+                # Indent works if we use json.loads to change into dict as dump indents properly with that
+                # Works without indent but is not human-readable
+                readableJSON = json.loads(manifestJSON)
+                json.dump(readableJSON, manifestSave, indent = 4)
+                if echo: print(f"JSON saved successfully to {filepath}")
+
+        # Saving to SQL database
+        if saveTo.lower() == 'both' or saveTo.lower() == 'sql':
+            # Saving to SQL database (if enabled)
+            # Save if the SQLengine is already established, if not try connect to SQL first
+            # If run into errors, cancel this operation
+            skipEngine = False
+            if self.SQLengine is None:
+                try:
+                    if echo: print('No SQL connection, attempting to create connection engine...')
+                    self.connectSQL(echo = echo)
+                    if echo: print('Connection engine created')
+                except Exception as e:
+                    skipEngine = True
+                    print(f"An error occurred, skipping connection engine creation: {e}")
+                    
+            if not skipEngine: # Run if engine already exists or just created 
+                from arcanequant.quantlib.SQLManager import SQLSave
+                SQLSave(self.DF, self.SQLengine, 'manifestTable', ignore_index = True, echo = False)
+                if echo: print('Saved to SQL successfully')
         
         return
 
 
     # Method to load manifest data and convert into Multi-Index DataFrame
-    def loadManifest(self, path, echo = True):
+    def loadManifest(self, path: str, echo = True): # TODO: ADD FROM METHOD FOR SQL OR BOTH ALSO ADD FIXING FOR INCOMPLETE PATH 
         """This method loads up a manifest file into the DataManifest class' DataFrame attribute."""
     
         if not isinstance(path, str): raise TypeError('You must provide a valid path to save or load.')
@@ -394,7 +449,7 @@ class DataManifest():
 ##################################
 ##################################
 # Direct Functions (may incorporate them into some other library or class later)
-def DownloadIntraday(path, tickers, intervals, months, APIkey, verbose = False):
+def DownloadIntraday(path: str, tickers: Iterable[str], intervals: Iterable[int], months: Iterable[str], APIkey: str, verbose = False): 
     """This function downloads monthly intraday stock data for a given stock, interval and month.
     The requested data is saved in a directory, and the manifest file in the directory is updated/created.
     The data is directly requested from Alphavantage's API, and requires an API key (free one obtainable).
@@ -404,14 +459,14 @@ def DownloadIntraday(path, tickers, intervals, months, APIkey, verbose = False):
     The intraday data is only available for equities listed on US exchanges.
     
     The input is as follows:
-    - path is the directory into which the intraday data is saved and the data manifest is created or updated.
-    - manifestFile is the name of the manifest file to be updated/created 
-    - tickers are the list of typical stock string (normally 4 characters) i.e. Microsoft is "MSFT"
-    - intervals is a list of int with time resolution options 1, 5, 15, 30 and 60 mins.
-    - months to request are in a list of strings in "YYYY-MM" format, i.e. "2025-01"
-    - verbose is a bool setting to detail the input, process and/or outputs
+    - path - String of the directory into which the intraday data is saved and the data manifest is created or updated.
+    - tickers - Iterable of string of typical stock symbols (normally 4 characters) i.e. Microsoft is "MSFT"
+    - intervals - Iterable of int of time resolution options 1, 5, 15, 30 and 60 mins.
+    - months - Iterable of string of months to request in "YYYY-MM" format, i.e. "2025-01"
+    - APIkey - String of the API key required by Alphavantage
+    - verbose - Bool setting to detail the input, process and/or outputs
     """
-
+    #TODO: REFACTOR THIS, ADD TYPE HINTING, FIX INPUT TEXT GUIDE AND ADD SAVE OPTIONALITY (BUT NEED TO DECIDE WHAT TO DO WITH META DATA FOR SQL)
     dataManifest = DataManifest()
     
     try:
@@ -533,7 +588,7 @@ def DownloadIntraday(path, tickers, intervals, months, APIkey, verbose = False):
                         if month == currentMonth: newValue = 2
                             
                         dataManifest.setValue(symbol, interval, month, newValue, sort = False) # No sort to save time
-                        dataManifest.saveManifest(path, echo = verbose) # Run quietly
+                        dataManifest.saveManifest(savePath = path, echo = verbose) # Run quietly
                     
     print('Current Manifest:')
     print(dataManifest.DF)

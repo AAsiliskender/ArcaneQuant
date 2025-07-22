@@ -1,8 +1,5 @@
 # Packages
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy import types as sqltype
-import sqlalchemy.exc as sqlexc
 
 # My packages
 from arcanequant.quantlib.DataManifestManager import DataManifest
@@ -128,7 +125,7 @@ querySetKeysTest = [testPS1, testCS1, testUS1, testCUS1, testSFS1, testSCFS1, te
 ######################### TEST FUNCTION ########################
 
 @pytest.mark.parametrize("tableName,keys,kType,ref,expected", querySetKeysTest)
-def test_SetKeysQuery_generator(tableName,keys,kType,ref,expected):
+def test_SetKeysQuery_generator(tableName: str, keys, kType: str, ref, expected: str):
     """
     Unit tests the query generation in the SetKeysQuery method (primary component).
     Tests all expected input types (tableName, key, kTypes, ref).
@@ -232,7 +229,7 @@ queryDropKeysTest = [testPD1, testCD1, testUD1, testCUD1, testSFD1, testSCFD1, t
 
 ######################### TEST FUNCTION ########################
 @pytest.mark.parametrize("tableName,keys,kType,ref,expected", queryDropKeysTest)
-def test_DropKeysQuery_generator(tableName,keys,kType,ref,expected):
+def test_DropKeysQuery_generator(tableName: str, keys, kType: str, ref, expected: str):
     """
     Unit tests the query generation in the DropKeysQuery method (primary component).
     Tests all expected input types (tableName, key, kTypes, ref).

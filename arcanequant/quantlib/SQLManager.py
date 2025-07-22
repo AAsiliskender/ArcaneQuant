@@ -1,20 +1,253 @@
-
-# MAKING CODE HERE TO SUBSTITUTE INTO PANDAS AS ID FOR RELATIONAL TABLES
-
-# THINKING OF ADDING ATTRIBUTES SELF.RELATION.TICKER/MANIFEST/CALENDAR/ID (TO DATAMANAGER)
+import pandas as pd
+import sqlalchemy
 
 class SQLManager():
     """Placeholder class for package-level structure or future use."""
     pass
 
 
-####### CONVERTING MANIFEST TABLE INTO SUITABLE SQL FORM, AND CONVERTING BACK TO PANDAS FORM (CONSIDERING TO KEEP MANIFESTID DATA)
-# In general, we add the uniqueID columns as replacements to break the database down into a relational form (use ID as int is more efficient)
-# We modify table to remove unnecessary columns or rows, then add to database (replace or append)
-# Then we set the datatype of columns and set the primary keys.
+# Functions in this file:
+# - SQLSetup - Sets up SQL to be used by DataManifest
+# - SQLEstablish - Establishes the database by creating necessary tables/columns
+# - SQLRepair - Repairs SQL system by remaking all tables and keys, can even resync data
+# - SQLSync - Syncs all data in storage to DataManifest
+# - SQLClear - Clears all row data in SQL (excluding precomputed tables like date/time)
+# - SetKeysQuery - Provide (or execute) query for setting key(s)
+# - DropKeysQuery - Provide (or execute) query for dropping key(s)
+# - ExecuteSQL - Executes provided SQL query (needs engine)
+
+
+# Set up database by creating tables/columns and necessary relations/keys
+def SQLSetup(connEngine: sqlalchemy.engine, new = True):
+    """
+    Sets up SQL to be used by DataManifest. Establishes the set of tables with SQLEstablish,
+    then sets all the necessary keys, and creates the view to connect .csv and SQL storage forms.
+    Input:
+    - connEngine - engine used to connect to SQL
+
+    Optional input:
+    - new - Boolean indicating if first-time setup, if False, skips establishing relational tables
+
+    Note: Does not sync any data from .csv to SQL.
+    Also, if first-time setup (new is True), also sets up testing infrastructure (testUser, testDatabase etc.)
+    """
+
+    if new:
+        print('Establishing tables and setting all keys to create the relational database...')
+        SQLEstablish(connEngine)
+        print('Setting up test infrastructure...')
+        testSetUpString = '''
+                    DROP DATABASE IF EXISTS "testDatabase";
+                    DROP USER IF EXISTS "testUser";
+                    
+                    CREATE DATABASE "testDatabase";
+                    CREATE USER "testUser";
+                    ALTER USER "testUser" WITH PASSWORD 'testPassword';
+                    ALTER DATABASE "testDatabase" OWNER TO "testUser";
+                    '''
+        ExecuteSQL(testSetUpString, connEngine)
+        
+
+    # TickerTable keys
+    SetKeysQuery('tickerTable', 'Ticker', 'primary', engine = connEngine)
+    SetKeysQuery('tickerTable', 'TickerID', 'unique', engine = connEngine)
+    
+    # DateTable keys
+    SetKeysQuery('dateTable', 'DateID', 'primary', engine = connEngine)
+    SetKeysQuery('dateTable', 'Date', 'unique', engine = connEngine)
+    SetKeysQuery('dateTable', 'DayOfWeek', 'secondary', engine = connEngine)
+    SetKeysQuery('dateTable', 'Day', 'secondary', engine = connEngine)
+    SetKeysQuery('dateTable', 'Month', 'secondary', engine = connEngine)
+    
+    # TimeTable keys
+    SetKeysQuery('timeTable', 'TimeID', 'primary', engine = connEngine)
+    SetKeysQuery('timeTable', 'Time', 'unique', engine = connEngine)
+    SetKeysQuery('timeTable', 'Hour', 'secondary', engine = connEngine)
+    SetKeysQuery('timeTable', 'Minute', 'secondary', engine = connEngine)
+    SetKeysQuery('timeTable', 'Second', 'secondary', engine = connEngine)
+    
+    # ManifestTable keys
+    SetKeysQuery('manifestTable', ('TickerID','Interval'), 'primary', engine = connEngine)
+    SetKeysQuery('manifestTable', 'TickerID', 'foreign', ref = ('tickerTable','TickerID'), engine = connEngine)
+    
+    # MarketTable keys
+    SetKeysQuery('marketTable', ('TickerID','Interval','DateID','TimeID'), 'primary', engine = connEngine)
+    SetKeysQuery('marketTable', ('TickerID','DateID','TimeID'), 'foreign', ref = ( ('tickerTable','TickerID'), ('dateTable','DateID'),
+                    ('timeTable','TimeID') ), engine = connEngine)
+    SetKeysQuery('marketTable', ('TickerID','Interval'), 'foreign', ref = ('manifestTable',['TickerID','Interval']), engine = connEngine)
+
+    # Can set extra indexes here (hour, or year etc.)
+
+    return
+
+# Establish database by creating necessary tables/columns.
+def SQLEstablish(engine: sqlalchemy.engine):
+    """
+    Establishes the database by creating the necessary tables and columns. Does not create any relations 
+    or additional columns.
+    Input:
+    - engine - SQL engine to connect to database
+    """
+    # First remove all tables directly via SQL (to remove all dependencies as well)
+    clearstring = '''
+                    DROP TABLE IF EXISTS "tickerTable" CASCADE;
+                    DROP TABLE IF EXISTS "marketTable" CASCADE;
+                    DROP TABLE IF EXISTS "dateTable" CASCADE;
+                    DROP TABLE IF EXISTS "timeTable" CASCADE;
+                    DROP TABLE IF EXISTS "manifestTable" CASCADE;
+                '''
+    ExecuteSQL(clearstring, engine)
+
+    
+    ### Creating TickerTable
+    # Set columns and index
+    tickerTable = pd.DataFrame(columns=['Ticker'])
+    tickerTable.rename_axis("TickerID",axis=0,inplace = True)
+    
+    # Set datatype of columns
+    datatypes = {  
+            "TickerID": sqltype.SmallInteger(), 
+            "Ticker": sqltype.String(10)
+        }
+    tickerTable.to_sql('tickerTable', engine, if_exists='replace', index=True, dtype = datatypes)
+    # Setting TickerID so that it is always not null and serial (so when new tickers added, gives correct ID)
+    tickerSetString = """
+                        ALTER TABLE "tickerTable"
+                        ALTER COLUMN "TickerID" ADD GENERATED BY DEFAULT AS IDENTITY,
+                        ALTER COLUMN "TickerID" SET NOT NULL;
+                        """
+    ExecuteSQL(tickerSetString, engine)
+
+    ### Creating MarketTable
+    # Set columns and index
+    marketTable = pd.DataFrame(columns=['DateID','TimeID','TickerID','Interval','Open','High','Low','Close','Volume','Nominal'])
+    
+    # Set datatype of columns
+    datatypes = {  
+            "DateID": sqltype.Integer(),
+            "TimeID": sqltype.Integer(), 
+            "TickerID": sqltype.SmallInteger(),
+            "Interval": sqltype.SmallInteger(), 
+            "Open": sqltype.Float(),
+            "High": sqltype.Float(),
+            "Low": sqltype.Float(),
+            "Close": sqltype.Float(),
+            "Volume": sqltype.BigInteger(),
+            "Nominal": sqltype.Float()
+        }
+    marketTable.to_sql('marketTable', engine, if_exists='replace', index=False, dtype = datatypes)
+
+
+    ### Creating DateTable and TimeTable (in one command using direct SQL queries)
+    wallstring = ""
+
+    # DateTable
+    wallstring += f'''
+                    DROP TABLE IF EXISTS "dateTable" CASCADE;
+    
+                    CREATE TABLE "dateTable" (
+                        "Date" DATE NOT NULL,
+                        "DateID" INT GENERATED ALWAYS AS (
+                            (extract(year FROM "Date") * 10000) + 
+                            (extract(month FROM "Date") * 100) + 
+                            extract(day FROM "Date")
+                            ) STORED,
+                        "Year" INT GENERATED ALWAYS AS ( extract(year FROM "Date") )STORED,
+                        "Month" INT GENERATED ALWAYS AS ( extract(month FROM "Date") )STORED,
+                        "Day" INT GENERATED ALWAYS AS ( extract(day FROM "Date") )STORED,
+                        "DayOfWeek" INT GENERATED ALWAYS AS ( extract(DOW FROM "Date") )STORED
+                    );
+
+                    INSERT INTO "dateTable" ("Date")
+                    SELECT generate_series('1900-01-01'::DATE, '2200-01-01'::DATE, '1 day');
+                    '''
+
+    # TimeTable
+    wallstring += f"""
+                    DROP TABLE IF EXISTS \"timeTable\" CASCADE;
+    
+                    CREATE TABLE \"timeTable\" (
+                        \"Time\" TIME NOT NULL,
+                        \"TimeID\" INT GENERATED ALWAYS AS (
+                            (extract(hour FROM \"Time\") * 10000) + 
+                            (extract(minute FROM \"Time\") * 100) + 
+                            extract(second FROM \"Time\")
+                            ) STORED,
+                        \"Hour\" INT GENERATED ALWAYS AS ( extract(hour FROM \"Time\") )STORED,
+                        \"Minute\" INT GENERATED ALWAYS AS ( extract(minute FROM \"Time\") )STORED,
+                        \"Second\" INT GENERATED ALWAYS AS ( extract(second FROM \"Time\") )STORED
+                    );
+
+                    INSERT INTO \"timeTable\" (\"Time\")
+                    SELECT generate_series('1900-01-01 00:00:00'::TIMESTAMP, '1900-01-01 23:59:59'::TIMESTAMP, '1 second'::INTERVAL)::TIME;
+                    """
+
+    ExecuteSQL(wallstring, engine)
+
+    ### Creating ManifestTable
+    # Set columns and index
+    manifestTable = pd.DataFrame(columns=['TickerID','Interval'])
+    manifestTable.rename_axis("Index",axis=0,inplace = True)
+    
+    # Set datatype of columns
+    datatypes = {  
+            "TickerID": sqltype.SmallInteger(),
+            "Interval": sqltype.SmallInteger()
+        }
+    manifestTable.to_sql('manifestTable', engine, if_exists='replace', index=False, dtype = datatypes)
+
+    # After tables are created, set up view(s) for extraction from SQL to pandas
+    viewsquery = """
+        CREATE OR REPLACE VIEW "stockData" AS
+        SELECT
+            tickt."Ticker", -- from tickerTable
+            mt."Interval",  -- from marketTable
+        
+            -- Construct DateTime from Date + Time
+            -- Date must be DATE (from dateTable) and Time must be TIME (from timeTable)
+            (dt."Date" + tt."Time") AS "DateTime",
+        
+            -- Market data
+            mt."Open",
+            mt."High",
+            mt."Low",
+            mt."Close",
+            mt."Volume",
+            mt."Nominal"
+        FROM "marketTable" mt
+        JOIN "dateTable" dt ON dt."DateID" = mt."DateID"
+        JOIN "timeTable" tt ON tt."TimeID" = mt."TimeID"
+        JOIN "tickerTable" tickt ON tickt."TickerID" = mt."TickerID";
+        
+
+        DO $$
+        DECLARE
+            col_list text;
+        BEGIN
+            SELECT string_agg('m."' || column_name || '"', ', ' ORDER BY ordinal_position)
+            INTO col_list
+            FROM information_schema.columns
+            WHERE table_name = 'manifestTable'
+              AND column_name NOT IN ('TickerID')
+              AND table_schema = 'public';
+        
+            EXECUTE format('
+                CREATE OR REPLACE VIEW "manifestData" AS
+                SELECT t."Ticker", %s
+                FROM "manifestTable" m
+                JOIN "tickerTable" t ON m."TickerID" = t."TickerID";
+            ', col_list);
+        END $$;
+        """
+    # The second part of this query makes the manifest view (with Ticker instead of TickerID) in SQL with the
+    # columns in the manifestTable, here it has no month cols (as its a new manifestTable), but reusing this
+    # should add the new columns
+    ExecuteSQL(viewsquery, engine)
+    
+    return
 
 # Repair SQL table/keys/data
-def SQLRepair(dataManifest = None, connEngine = None, dataRepair = True, echo = False):
+def SQLRepair(dataManifest: pd.DataFrame = None, connEngine: sqlalchemy.engine = None, dataRepair = True, echo = False):
     """
     Repairs SQL system by remaking all keys (and tables as needed) on a database, and resyncing data to SQL if possible.
     
@@ -60,8 +293,210 @@ def SQLRepair(dataManifest = None, connEngine = None, dataRepair = True, echo = 
     
     return
 
+# Saves data into SQL in upsert. (Of Manifest data or Market data)
+def SQLSave(saveDF: pd.DataFrame, engine: sqlalchemy.engine, saveTable: str, ignore_index = True, echo = False):
+    """
+    Saves provided dataset into an SQL table (in an upsert - update-insert - format)
+    Inputs:
+    - saveDF - DataFrame to upsert into table
+    - engine - Connection engine to SQL database
+    - saveTable - String of target table name to be upserted into
 
-# Method to provide query for setting key(s) for a table (after dropping existing one first)
+    Optional inputs:
+    - ignore_index - Bool indicating to ignore the index of the inputted dataframe
+    - echo - output some information during execution
+
+    Converts Ticker column into TickerID and breaks down DateTime into DateID and TimeID (with YY-mm-dd HH:MM:SS format) before
+    inserting into SQL tables. Also updates tickerTable in SQL if new ticker is detected, and adds new columns to manifestTable
+    if new columns detected. (Can potentially be used to add user-defined tables, not tested though.)
+    Note:
+    - NoneType (null) values can be added/inserted into rows as long as it does not violate any NOT NULL constraints.
+    - If inserting market data, make sure to label the data with columns for 'Ticker' and 'Interval', otherwise the method will
+    raise a null constraint violation error.
+    - This function searches for indications of saveTable name. If name is close enough to default table names but incorrect,
+    it changes it to defaults, those being 'manifestTable'/'compressedManifestTable' (which looks for letters 'comp' and/or
+    'manifest') and for 'marketTable' (looking for 'market' or 'stock'). Any other names not fitting into any of these
+    descriptions are treated as is, so be weary of capitalisations.
+    """
+
+    # Convert name at start (to deal with possible spell errors)
+    if "comp" in saveTable.lower() and "manif" in saveTable.lower():
+        saveTable = "compressedManifestTable"
+    elif "manif" in saveTable.lower():
+        saveTable = "manifestTable"
+    elif "stock" in saveTable.lower() or "market" in saveTable.lower():
+        saveTable = "marketTable"
+
+    # Convert index into cols (as we will use index = False, and need to access index values)
+    saveDF = saveDF.reset_index()
+    if ignore_index: saveDF.drop(columns = 'index', axis = 1, inplace = True, errors = 'ignore') # Delete the basic index if it exists (if desired)
+
+    # Break down certain columns (if they exist) to be used with relational tables in SQL (tickerTable, dateTable, timeTable etc.)
+    # Ticker column
+    if 'Ticker' in saveDF.columns:
+        # Get tickerTable from SQL, we will convert Ticker/Symbol into TickerID
+        tickerTable = pd.read_sql('SELECT "TickerID", "Ticker" FROM "tickerTable";', con = engine)
+
+        # First check if any tickers not in tickerTable (if so add into SQL table, then re-read)
+        newTicks = [tick for tick in list(saveDF.Ticker.unique()) if tick not in list(tickerTable['Ticker'])]
+        if len(newTicks) > 0:
+            addTicks = pd.DataFrame(columns = ['Ticker'], data = newTicks)
+            addTicks.to_sql('tickerTable', engine, if_exists='append', index=False, method = postgres_upsert, chunksize = 1000) # Add new tickers to SQL
+
+            tickerTable = pd.read_sql('SELECT "TickerID", "Ticker" FROM "tickerTable";', con = engine) # Re-read updated table
+
+        # Merge tickerID to data frame
+        saveDF = saveDF.merge(tickerTable, on = 'Ticker', how = 'left') # Note that the order doesn't technically matter as SQL matches based on column names
+
+        # Drop Ticker/Symbol col after acquiring TickerID
+        saveDF.drop(columns = 'Ticker', axis = 1, inplace = True)
+
+    # DateTime column
+    if 'DateTime' in saveDF.columns:
+        # Break DateTime into Date and Time, then reconstruct DateID and TimeIDs
+        saveDF['DateID'] = pd.to_datetime(saveDF.DateTime, format = '%Y-%m-%d %H:%M:%S').dt.date.astype(str).replace('-','', regex=True)
+        saveDF['TimeID'] = pd.to_datetime(saveDF.DateTime, format = '%Y-%m-%d %H:%M:%S').dt.time.astype(str).replace(':','', regex=True)        
+        saveDF.drop(columns = 'DateTime', axis = 1, inplace = True)
+
+    # Using a different method to save manifest table (as columns are actively added to SQL table)
+    if saveTable == 'compressedManifestTable':
+        print('To add compressed manifest functionality')
+        pass # TODO: ADD IN CODE TO SAVE COMPRESSED MANIFEST (SIMILAR TO STANDARD MANIFEST)
+
+    elif saveTable == 'manifestTable':
+        # Read existing manifest in SQL
+        manifestSQL = pd.read_sql(f'SELECT * FROM "{saveTable}"', engine)
+        excludeCol = list(manifestSQL.columns.values) # Get existing columns in last manifest
+        
+        # Drop already existing columns from manifest to-be-inserted (to get only new columns that will be inserted)
+        newColsDF = saveDF.drop(columns=excludeCol, inplace = False)
+        # Extract columns that did not exist in previous manifest (to add to SQL manually)
+        newCol = list(newColsDF.columns.values)
+
+        # Create new columns if needed
+        queryAddCol = f'''ALTER TABLE "{saveTable}"'''
+        for i in range(len(newCol)):
+            col = newCol[i]
+            queryAddCol += f'''
+                ADD COLUMN "{col}" SMALLINT'''
+            if i < len(newCol)-1:
+                queryAddCol += ','
+            else:
+                queryAddCol += ';'
+                
+        if echo:
+            print('Adding new columns to manifestTable')
+            print(queryAddCol)
+        
+        if not len(newCol) == 0: # If new columns to add
+            ExecuteSQL(queryAddCol, engine)
+
+        # Whenever saving manifest, update the view after to reflect the new cols (not necessary but good practice,
+        # as we update when loading too)
+        updateViewQuery = """
+        DO $$
+        DECLARE
+            col_list text;
+        BEGIN
+            SELECT string_agg('m."' || column_name || '"', ', ' ORDER BY ordinal_position)
+            INTO col_list
+            FROM information_schema.columns
+            WHERE table_name = 'manifestTable'
+              AND column_name NOT IN ('TickerID')
+              AND table_schema = 'public';
+        
+            EXECUTE format('
+                CREATE OR REPLACE VIEW "manifestData" AS
+                SELECT t."Ticker", %s
+                FROM "manifestTable" m
+                JOIN "tickerTable" t ON m."TickerID" = t."TickerID";
+            ', col_list);
+        END $$;
+        """
+        ExecuteSQL(updateViewQuery, engine)
+    
+    if echo: print('Upserting table into SQL...')
+    saveDF.to_sql(saveTable, engine, if_exists='append', index = False, method = postgres_upsert, chunksize = 1000000) # Can optimise chunksize if needed
+    return
+
+# Sync SQL data from storage to SQL form
+def SQLSync(dataManifest, fastSync = False, echo = False):
+    """
+    Syncs all data in storage indicated by dataManifest directory with SQL database (in upsert mode).
+    The data is transferred from .csv to SQL (not the other way around).
+
+    Input:
+    - dataManifest - DataManifest type, indicates the DataManifest and relevant data to sync with SQL.
+
+    Optional inputs:
+    - fastSync - Boolean indicating if fast syncing is to be used
+    - echo - Echo output/actions from function
+
+    Note:
+    - fastSync uses fastValidate on validating manifest, and saves the .csv data (in relational form) to the
+    SQL database. Not using fastSync conducts a full validation, and also deletes data from SQL before saving
+    (to avoid potential clashes and errors).
+    """
+    print('Syncing SQL with all existing data in storage...')
+    
+    if echo: print('Verifying existence of files indicated to exist in DataManifest')
+    dataManifest.validateManifest(fastValidate = fastSync, echo = echo)
+
+    # If not fast sync, delete all SQL data first before reloading
+    if not fastSync:
+        if echo: print('Clearing all data before reload')
+        SQLClear(dataManifest.SQLengine, echo)
+
+    if echo: print('Syncing data manifest into SQL database')
+    SQLSave(dataManifest.DF, dataManifest.SQLengine, 'manifestTable', echo = echo)
+    
+    if echo: print('Loading each market data file into SQL database')
+    # Sync market table based on dataManifest showing if data exists or not
+    # Unique values of ticker
+    tickerComponents = list(dataManifest.DF.index.get_level_values(0).unique().values)
+    # We get these now since it doesn't change across tickers or intervals
+    monthComponents = list(dataManifest.DF.columns.values)
+
+    for ticker in tickerComponents:
+        tickerSection = dataManifest.DF[(dataManifest.DF.index.get_level_values('Ticker') == ticker)]
+        # Will try for each interval list in each ticker set (to avoid having to catch errors)
+        intervalComponents = list(tickerSection.index.get_level_values(1).unique().values) 
+
+        for interval in intervalComponents:
+            for month in monthComponents:
+                # Key:
+                # 0 - No file exists
+                # 1 - File exists
+                # 2 - File exists but incomplete (as file covers current time or not updated after month ended)
+
+                datapointValue = dataManifest.DF.loc[((ticker,interval),month)]
+                # If file exists, load into SQL
+                if datapointValue == 1 or datapointValue == 2:
+                    fileRead = dataManifest.loadData_fromcsv(ticker, interval, month, echo = echo)
+                    SQLSave(fileRead, dataManifest.SQLengine, 'marketTable', echo = echo)
+
+    return
+
+# Clear all row data in SQL (excluding precomputed tables like date/time)
+def SQLClear(connEngine, echo = False):
+    """
+    Clears all data rows in SQL (excluding precomputed date/time dimension tables).
+    Inputs:
+    - connEngine - Connection to SQL database to repair
+    - echo - Echo output/actions from function
+    """
+    if echo: print('Clearing all datasets in SQL') # TEST THIS FUNCTION
+
+    delQuery = '''
+    DELETE FROM "manifestTable";
+    DELETE FROM "marketTable";
+    DELETE FROM "tickerTable";
+    '''
+
+    ExecuteSQL(delQuery, connEngine)
+    return
+
+# Provide (or execute) query for setting key(s) for a table (after dropping existing one first)
 def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None, echo = False):
     """
     Provides query to set the keys of a table (from a column(s)) in an SQL database. You must specify the sort of key being set
@@ -300,8 +735,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None, 
             
     return wallstring
 
-
-# Method to provide query for dropping key(s) for a table (without replacing with another one)
+# Provide (or execute) query for dropping key(s) for a table (without replacing with another one)
 def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine = None, echo = False):
     """
     Provides query to delete the keys of a table in an SQL database. You must specify the sort of key being dropped
@@ -485,18 +919,28 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
 
     return wallstring
 
-def ExecuteSQL(query, engine):
-    """ Executes a given query (in string) in SQL using the given connection engine. """
+# Execute SQL query
+def ExecuteSQL(query, engine, fetch = False):
+    """
+    Executes a given query (in string) in SQL using the given connection engine.
+    Enabling fetching provides the output from SQL (in whatever format it may be).
+    Note that if fetch is enabled but no output is obtained it will raise an error.
+    """
     from sqlalchemy import text
 
     with engine.connect() as conn:
-        conn.execute(
+        result = conn.execute(
             text( query )
         )
-        conn.commit()  # Required for Data Definiton Language (DDL) statements
-    return
+        if fetch:
+            rows = result.fetchall()
+            conn.commit()  # Required for Data Definiton Language (DDL) statements
+            return rows
+        else:
+            conn.commit()  # Required for Data Definiton Language (DDL) statements
+            return
 
-
+# Applying upsert (update-insert) in postgres database
 def postgres_upsert(table, conn, keys, data_iter):
     from sqlalchemy.dialects.postgresql import insert
 

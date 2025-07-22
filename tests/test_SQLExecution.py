@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import time as dt_time
 from tabulate import tabulate
 import psycopg2
+import sqlalchemy
 from sqlalchemy import create_engine, Engine, text
 import sqlalchemy.exc as sqlexc
 from sqlalchemy import types as sqltype
@@ -68,9 +69,9 @@ testParams = [('Pandas', testquery, pd_expected), ('Direct', testquery, sql_expe
 
 ######################### TEST FUNCTION ########################
 @pytest.mark.parametrize("testFrom,queryinput,expected", testParams)
-def test_ExecuteSQL(testFrom, queryinput, expected, setup_SQLtestengine):
+def test_ExecuteSQL(testFrom: str, queryinput: str, expected, setup_SQLtestengine: sqlalchemy.engine):
 
-    ExecuteSQL(queryinput, setup_SQLtestengine)
+    ExecuteSQL(queryinput, setup_SQLtestengine) # Execute the test input
 
     # Extract what the table should look like and compare to what it should be
     # For example, from SQL its a string of the table appearance and contents
@@ -94,7 +95,7 @@ def test_ExecuteSQL(testFrom, queryinput, expected, setup_SQLtestengine):
 
 ##################### FIXTURE FUNCTION(S) ######################
 @pytest.fixture(scope = 'function') 
-def setup_SQLtestengine() -> Engine:
+def setup_SQLtestengine() -> sqlalchemy.engine:
     # Setup
     setupManifest = DataManifest()
     setupManifest.connectSQL('testSQLlogin')
