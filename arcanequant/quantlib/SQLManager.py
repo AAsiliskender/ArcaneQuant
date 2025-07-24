@@ -419,7 +419,7 @@ def SQLSave(saveDF: pd.DataFrame, engine: sqlalchemy.engine, saveTable: str, ign
     saveDF.to_sql(saveTable, engine, if_exists='append', index = False, method = postgres_upsert, chunksize = 1000000) # Can optimise chunksize if needed
     return
 
-# Sync SQL data from storage to SQL form
+# Sync SQL data by saving from direct storage to SQL form
 def SQLSync(dataManifest, fastSync = False, echo = False):
     """
     Syncs all data in storage indicated by dataManifest directory with SQL database (in upsert mode).
@@ -470,7 +470,7 @@ def SQLSync(dataManifest, fastSync = False, echo = False):
                 # 2 - File exists but incomplete (as file covers current time or not updated after month ended)
 
                 datapointValue = dataManifest.DF.loc[((ticker,interval),month)]
-                # If file exists, load into SQL
+                # If file exists, save into SQL
                 if datapointValue == 1 or datapointValue == 2:
                     fileRead = dataManifest.loadData_fromcsv(ticker, interval, month, echo = echo)
                     SQLSave(fileRead, dataManifest.SQLengine, 'marketTable', echo = echo)

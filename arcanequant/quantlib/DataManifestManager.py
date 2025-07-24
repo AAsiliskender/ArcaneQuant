@@ -3,19 +3,19 @@ from dotenv import load_dotenv, find_dotenv
 import os
 from io import StringIO
 from ast import literal_eval
-from datetime import datetime
+#from datetime import datetime
 import json
 import pandas as pd
 import sqlalchemy
 from sqlalchemy import create_engine, text
-import requests
 from typing import Iterable
 
 
 # CREATE A COMPRESSED MANIFEST (YEARS AND STOCKS ONLY, 2 INDICATES AN INCOMPLETE POINT (I.E. NOT ALL MONTHS OR NOT ALL INTERVALS)
 
 # VALIDATION IS STILL DONE ONLY VIA CSV FILES
-# MAYBE CAN EXTEND VALIDATION TO RELY ALSO ON DATABASE (AND MAYBE HAVE A MANIFEST TABLE IN DATABASE?)
+# MAYBE CAN EXTEND VALIDATION TO RELY ALSO ON DATABASE
+# CAN MAKE VALIDATION BE CHECKED THROUGH ONLY DIRECT FILES, THROUGH DATABASE OR A CROSS-CHECK
 
 # MODIFY DOWNLOADINTRADAY TO ADD SAVE SETTING (SAVE AS SQL OR JSON OPTIONS, AND MAYBE ADD CSV OPTION)
 
@@ -25,7 +25,6 @@ from typing import Iterable
 # SHOULD CONTAIN DOWNLOAD INTRADAY AND EXTRACT DATA (CAN ALSO HAVE SAVE DATA WHICH POINTS TO SQLSAVE OR SAVECSV)
 # MAKE A FUNCTION TO SAVE A FILE TO CSV? (WITH ADDITIONAL PARAMETERS? CURRENTLY NOTHING TO CALL TO SAVE TO CSV)
 
-# ADD CODE TO STITCH TOGETHER SPECIFIC DATA PARTS FROM DIFFERENT SETS FOR ANALYSIS (CORRELATION ETC.)
 # ADD CODE TO DIRECTLY API CALL POST-PROCESS DATA (TECH INDICATORS) (ALSO MAKE CODE TO PROCESS IN HOUSE IF DESIRED)
 # WILL NEED CODE TO ASSESS ANY STOCKSPLIT INFORMATION AND EITHER MARK FOR RENEW DATA FROM API OR EDIT EXISTING DATA AS NEEDED
 
@@ -43,8 +42,8 @@ class DataManifestManager():
 # Data Manifest Class
 class DataManifest():
     """
-    Data Manifests show in a readable format the set of data that exists in the directory the file is in.
-    This allows for easier downloading of missing data as necessary.
+    DataManifests show in a readable format the set of data that exists in the directory the file is in.
+    This allows for easier tracking and downloading of missing data as necessary.
     This class also has functions and methods to easily modify values as needed as well as verifying the presence of files.
     The data represented by the manifest can be loaded from its .csv form or from its database (postgreSQL) form.
     The data manifest dataframe itself can be saved or loaded from .json form or from its database (postgreSQL) form.
@@ -59,16 +58,16 @@ class DataManifest():
     2 - File exists but incomplete (as file covers current time or not updated after month ended)
     Note: 2 is currently marked by you manually, and if validation finds an unmarked file, it assumes it is complete unless stated otherwise.
     ---
-    _____
+    ___________________________________
     Method List:
-    - loadManifest - Loads manifest from a .json file into the Data Frame in this class
-    - saveManifest - Saves manifest in this class from DataFrame into a .json file 
-    - setValue - Sets (or adds) a given value in the manifest
-    - validateManifest - Checks the files (or lack thereof) indicated by the manifest
-    - reduceManifest - Culls and rows and columns full of zeroes
-    - loadData_fromcsv - Loads actual data (of point indicated in manifest) from .csv file
-    - loadData_fromsql - Loads actual data (of point indicated in manifest) from database
-    - convertDataSQL - Loads actual data (of point indicated in manifest) and saves into SQL database
+    > loadManifest - Loads manifest from a .json file into the Data Frame in this class
+    > saveManifest - Saves manifest in this class from DataFrame into a .json file 
+    > setValue - Sets (or adds) a given value in the manifest
+    > validateManifest - Checks the files (or lack thereof) indicated by the manifest
+    > reduceManifest - Culls and rows and columns full of zeroes
+    > loadData_fromcsv - Loads actual data (of point indicated in manifest) from .csv file
+    > loadData_fromsql - Loads actual data (of point indicated in manifest) from database
+    > convertDataSQL - Loads actual data (of point indicated in manifest) and saves into SQL database
     """
         
     def __init__(self):
@@ -169,7 +168,7 @@ class DataManifest():
         return
 
     # Method to create and link an SQL connection engine and link to class instance
-    def connectSQL(self, dbcred = 'SQLlogin', echo = False):
+    def connectSQL(self, dbcred = 'SQLlogin', echo = True):
         """
         Creates connection engine and links to class instance (self.SQLengine) for the database given the requisite details.
         You must have already set up SQL and a database to use this functionality.
@@ -206,7 +205,7 @@ class DataManifest():
 
         driver = os.getenv("DRIVER")
         dialect = os.getenv("DIALECT")
-        username = os.getenv("DB_USER") # Not USERNAME as that aLready exists in OS environment variables and it is not wise to overwrite it
+        username = os.getenv("DB_USER") # Not USERNAME as that already exists in OS environment variables and it is not wise to overwrite it
         password = os.getenv("PASSWORD")
         host_machine = os.getenv("HOST_MACHINE")
         port = os.getenv("PORT")
@@ -219,7 +218,7 @@ class DataManifest():
         
                                      #"dialect+driver//username:password@hostname:portnumber/databasename") 
         self.SQLengine = create_engine(connstring)
-        print(f"Connecting to engine: {self.SQLengine}")
+        if echo: print(f"Connecting to engine: {self.SQLengine}")
         # Note: Code fails if no/wrong database (OperationalError)
         return
     
@@ -269,11 +268,12 @@ class DataManifest():
         return
 
     # Method to load .csv market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromcsv(self, ticker: str, interval: int, month: str, convert_DateTime = False, echo = True):
+    def loadData_fromcsv(self, ticker: str, interval: int, month: str, convert_DateTime = False, echo = True) -> pd.DataFrame:
         """
         This method loads a .csv file of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
         The method assumes the file naming format "{ticker}_{interval}_{month}.csv" where month is YYYY-MM ("2025-01") on the .csv files 
         The method returns the data frame of stock data.
+        Note: This method only returns a single monthly period, for custom length periods, use ExtractData.
 
         Input:
         - ticker - string of ticker name (i.e. "NVDA")
@@ -284,7 +284,7 @@ class DataManifest():
         - convert_DateTime - Boolean indicating to read the DateTime column as datetime64 type (or as a string)
         - echo - Boolean that provides more output during execution.
         """
-        if not isinstance(self.directory, str): raise TypeError('The data manifest directory pointer must be a string pointing to a valid path/folder.')
+        if ( not isinstance(self.directory, str) ) or self.directory == "": raise TypeError('The data manifest directory pointer must be a string pointing to a valid path/folder.')
         
         fileString = r'' + ticker + "_" + str(interval) + "_" + month
         if echo: print(rf"Loading file data: {fileString}.csv")
@@ -297,15 +297,31 @@ class DataManifest():
         return fileRead
 
     # Method to load database market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromsql(self, ticker, interval, month, echo = False):
+    def loadData_fromsql(self, ticker: str, interval: int, month: str, convert_DateTime = False, echo = True) -> pd.DataFrame:
         """
         This method loads a part of the database of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
         The method assumes the postgreSQL information from self.SQLengine
-        The method returns the data frame of stock data.
+        The method returns the data frame of stock data, and calls ExtractData to work.
+        Note: This method only returns a single monthly period, for custom length periods, use ExtractData directly.
+
+        Input:
+        - ticker - string of ticker name (i.e. "NVDA")
+        - interval - int of interval value (time gap between datapoints)
+        - month - string of the year and month of the period (in YYYY-MM format, i.e. "2025-01")
+        
+        Optional inputs:
+        - convert_DateTime - Boolean indicating to read the DateTime column as datetime64 type (or as a string)
+        - echo - Boolean that provides more output during execution.
         """
         
+        xd = ExtractData(self, "stockTable", month, month, fromSQL = False, condition = None, ticker = [ticker])
 
         fileRead=0 # TO DELETE OR COMPLETE
+
+
+
+        if convert_DateTime:
+            fileRead['DateTime'] = pd.to_datetime(fileRead['DateTime'], format = "%Y-%m-%d %H:%M:%S")
 
         return fileRead
     
@@ -393,206 +409,87 @@ class DataManifest():
 
 
     # Method to load manifest data and convert into Multi-Index DataFrame
-    def loadManifest(self, path: str, echo = True): # TODO: ADD FROM METHOD FOR SQL OR BOTH ALSO ADD FIXING FOR INCOMPLETE PATH 
-        """This method loads up a manifest file into the DataManifest class' DataFrame attribute."""
-    
-        if not isinstance(path, str): raise TypeError('You must provide a valid path to save or load.')
-        
+    def loadManifest(self, loadFrom = 'direct', path = "", echo = True):
+        """
+        This method loads up a manifest file into the DataManifest class' DataFrame attribute.
+        Inputs:
+        - loadFrom - String indicating where to load from, 'direct' to load from '.json' file, and 'database'
+        to load from the SQL database
+        - path - String of the directory of the manifestFile (required only for 'direct' load)
+        - echo - Boolean indicating method verbosity
+        Notes:
+        - If the path is "" or None, then the method tries to use the DataManifest's self.directory attribute
+        - To load from 'database' the DataManifest must have a valid self.SQLengine connection engine
+        """
         if echo: print('Loading Manifest Data')
 
-        # Update class-file link details
-        self.directory = path
-        filepath = path + self.fileName + '.json'
-        if echo: print('Load path/name: ' + filepath) 
-        
-        # Here we load the .json file before converting into MIDF
-        with open(filepath,) as manifestLoad: # Default is read mode
-            # Note: manifestJSON is the string version of loadJSON (dict form), difference is None is null in JSON form
-            loadJSON = json.load(manifestLoad)
-        
-        # After loading json (dict form and None) need to convert to json form (string form and null) to use in pandas
-        stringJSON = json.dumps(loadJSON)
-        
-        # Here we read the JSON form to convert into MIDF and process it to return to original form
-        # We don't use json.load as we parse into DF not dict
-        self.DF = pd.read_json(StringIO(stringJSON))
-        
-        # Convert the strings of the 'tuples' in the index into a tuple and put into list to recreate the MultiIndex
-        indexlist=[literal_eval(x) for x in self.DF.index]
-        
-        # Change index from fake tuple into MultiIndex (and rename index axes) 
-        self.DF.index = pd.MultiIndex.from_tuples(indexlist,names=['Ticker','Interval'])
-        
-        # Rename the column axis to Month
-        self.DF.rename_axis("Month",axis=1,inplace = True)
-    
-        # Convert the full datetime month representation to only Year-Month (while keeping it string)
-        # Code works if column is both originally string or datetime representation
-        if isinstance(self.DF.columns, pd.Index):
-            self.DF.columns = pd.to_datetime(self.DF.columns,format="%Y-%m")
-            self.DF.columns = self.DF.columns.strftime("%Y-%m")
-        elif isinstance(self.DF.columns, pd.DatetimeIndex):
-            self.DF.columns = self.DF.columns.strftime("%Y-%m")
-        
-        # Replace any NaNs with zeroes
-        self.DF.fillna(0, inplace=True)
-    
-        # Convert all values to int (1 or 0)
-        for column in self.DF.columns:
-            self.DF[column] = self.DF[column].astype(int)
-        
-        return
+        if loadFrom not in ('direct','database'): raise ValueError('You must provide a loading method for the manifest.')
 
-##################################
-##################################
-
-##################################
-##################################
-# Direct Functions (may incorporate them into some other library or class later)
-def DownloadIntraday(path: str, tickers: Iterable[str], intervals: Iterable[int], months: Iterable[str], APIkey: str, verbose = False): 
-    """This function downloads monthly intraday stock data for a given stock, interval and month.
-    The requested data is saved in a directory, and the manifest file in the directory is updated/created.
-    The data is directly requested from Alphavantage's API, and requires an API key (free one obtainable).
-    Documentation for API here: https://www.alphavantage.co/documentation/
-    The primary data file is saved in a .csv format with a naming format "{ticker}_{interval}_{month}.csv".
-    The meta data of the file is saved in a .csv format similar to the primary file, with the added suffix '_meta'
-    The intraday data is only available for equities listed on US exchanges.
-    
-    The input is as follows:
-    - path - String of the directory into which the intraday data is saved and the data manifest is created or updated.
-    - tickers - Iterable of string of typical stock symbols (normally 4 characters) i.e. Microsoft is "MSFT"
-    - intervals - Iterable of int of time resolution options 1, 5, 15, 30 and 60 mins.
-    - months - Iterable of string of months to request in "YYYY-MM" format, i.e. "2025-01"
-    - APIkey - String of the API key required by Alphavantage
-    - verbose - Bool setting to detail the input, process and/or outputs
-    """
-    #TODO: REFACTOR THIS, ADD TYPE HINTING, FIX INPUT TEXT GUIDE AND ADD SAVE OPTIONALITY (BUT NEED TO DECIDE WHAT TO DO WITH META DATA FOR SQL)
-    dataManifest = DataManifest()
-    
-    try:
-        dataManifest.loadManifest(path)
-    except FileNotFoundError:
-        pass # Use the empty MIDF to start with if no file
-    
-    # Here we scrape past intraday stock data
-    # For now, not interested in testing current prices as can test it later by making it past :D
-    # But need to have a way of retrieving live data to guide my trading decisions
-
-    for month in months:
-        # If current month (today) is same as month requested the dataset will always be updated from API
-        # If not, then if data is incomplete (value 2 in manifest) or missing (value 0), request, otherwise don't (as we already have it)
-        currentMonth = pd.to_datetime(datetime.now(),format="%Y-%m")
-        currentMonth = currentMonth.strftime("%Y-%m")
-        update = False
+        # Database load method
+        if loadFrom == 'database':
+            if self.SQLengine == None:
+                raise ValueError('You must provide a connection engine to use to load the manifest from.')
             
-        for symbol in tickers:
-            for interval in intervals:
-                
-                # Check if dataset exists before making request (to avoid wasting limited daily calls)
-                try:
-                    # Check data file here (can either try load directly or check manifest)
-                    dataVal = dataManifest.DF.loc[((symbol,interval),month)] # KeyError
-                except KeyError:
-                    print('Data file not indicated in manifest, requesting from API and saving')
-                    update = True
+            if echo: print(f'Loading manifest view from engine: {self.SQLengine}')
+            
+            self.DF = pd.read_sql('SELECT * FROM "manifestData";', self.SQLengine, index_col=['Ticker','Interval'])
+            return
 
+        # Direct load method
+        if loadFrom == 'direct':
+            if not isinstance(path, str):
+                raise TypeError('You must provide a valid path to load the manifest from.')
+            elif path == "":
+                # Try use self.directory (if this is "" or None, raise error)
+                if self.directory == None or self.directory == "":
+                    raise ValueError('You must provide a valid load directory string')
                 else:
-                    # Since we have a value in the manifest (no KeyError), we check what the number is (0, 1, or 2)
-                    if dataVal == 0:
-                        update = True
-                        print('Data file indicated missing in manifest, requesting from API and saving')
+                    path = self.directory
 
-                    # Even if dataVal is 1, if we request current month, it should always update (shouldn't be 1 in the first place)
-                    elif dataVal == 1 and month != currentMonth:
-                        print('Data file existence indicated in manifest, skipping.')
-                        update = False
-                    else: # Only remaining option is dataVal is 2 and/or requested month is current month
-                        print('Data file indicated incomplete, updating from API.')
-                        update = True
+            # Update class-file link details
+            self.directory = path
+
+            filepath = path + self.fileName + '.json'
+            if echo: print('Load path/name: ' + filepath) 
             
-                finally:
-                    # Now we decide to request/update the data from the API (or not)
-                    if update:
-                        # Taking direct data using Alphavantage's API of intraday (and can even do daily values)
-                        alphaURL = rf"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval={interval}min&month={month}&outputsize=full&apikey={APIkey} "
-                        if verbose: print(alphaURL)
-                        
-                        # Requesting data from url
-                        r = requests.get(alphaURL)
+            # Here we load the .json file before converting into MIDF
+            with open(filepath,) as manifestLoad: # Default is read mode
+                # Note: manifestJSON is the string version of loadJSON (dict form), difference is None is null in JSON form
+                loadJSON = json.load(manifestLoad)
+            
+            # After loading json (dict form and None) need to convert to json form (string form and null) to use in pandas
+            stringJSON = json.dumps(loadJSON)
+            
+            # Here we read the JSON form to convert into MIDF and process it to return to original form
+            # We don't use json.load as we parse into DF not dict
+            self.DF = pd.read_json(StringIO(stringJSON))
+            
+            # Convert the strings of the 'tuples' in the index into a tuple and put into list to recreate the MultiIndex
+            indexlist=[literal_eval(x) for x in self.DF.index]
+            
+            # Change index from fake tuple into MultiIndex (and rename index axes) 
+            self.DF.index = pd.MultiIndex.from_tuples(indexlist,names=['Ticker','Interval'])
+            
+            # Rename the column axis to Month
+            self.DF.rename_axis("Month",axis=1,inplace = True)
         
-                        # Reading data as json format (dictionary)
-                        data = r.json()
+            # Convert the full datetime month representation to only Year-Month (while keeping it string)
+            # Code works if column is both originally string or datetime representation
+            if isinstance(self.DF.columns, pd.Index):
+                self.DF.columns = pd.to_datetime(self.DF.columns,format="%Y-%m")
+                self.DF.columns = self.DF.columns.strftime("%Y-%m")
+            elif isinstance(self.DF.columns, pd.DatetimeIndex):
+                self.DF.columns = self.DF.columns.strftime("%Y-%m")
+            
+            # Replace any NaNs with zeroes
+            self.DF.fillna(0, inplace=True)
+        
+            # Convert all values to int (1 or 0)
+            for column in self.DF.columns:
+                self.DF[column] = self.DF[column].astype(int)
+            
+            return
 
-                        # Raise error if API call limit reached or if another error message:
-                        if "Information" in data:
-                            errorStr = data["Information"]
-                            raise APIError(f"API call limit reached (call: {symbol}, {interval}min, {month}). Statement from API: {errorStr}")
-                        elif "Error Message" in data:
-                            errorStr = data["Error Message"]
-                            raise APIError(f"Invalid API call ({symbol}, {interval}min, {month}), check IPO of ticker. Statement from API: {errorStr}")
-                        elif "Note" in data:
-                            errorStr = data["Note"]
-                            raise APIError(f"Unintended response ({symbol}, {interval}min, {month}). Statement from API: {errorStr}")
-                        elif "Meta Data" not in data:
-                            raise APIError(f"The API response does not contain data. Check the API output here: {data}")
-                        
-                        # Converting the dictionary form to DataFrame
-                        scrapeDF = pd.DataFrame.from_dict(data, orient='columns')
-                        print(scrapeDF)
-                        
-                        # This DF contains both meta data and actual data, must split them up first
-                        datalabel = f'Time Series ({interval}min)' # To get the header of the actual data
-                        
-                        metaDF = scrapeDF[['Meta Data']].dropna(subset = ['Meta Data'])
-                        dataDF = scrapeDF[[datalabel]].dropna(subset = [datalabel])
-        
-                        # Actual data post processing (renaming columns etc.)
-                        dateTimeCol = dataDF.index # Save datetime index to add later as a column
-                        dataDF = pd.DataFrame(list(dataDF[datalabel]))
-                        dataDF['DateTime'] = dateTimeCol
-        
-                        dataDF.rename(columns={'1. open' : 'Open', '2. high' : 'High', '3. low' : 'Low', '4. close' : 'Close', '5. volume' : 'Volume'}, inplace=True)
-                        dataDF = dataDF[['DateTime','Open','High','Low','Close','Volume']] # Reordering columns
-        
-                        # Show meta and actual data (if show enabled)
-                        if verbose:              
-                            print('Meta Data:')
-                            print(metaDF)
-                            print('Actual Data DataFrame')
-                            print(dataDF)
-                        
-                        # Save Meta Data with index (and excepting a possible lack of folder)
-                        try:
-                            metaDF.to_csv(rf"{path}{symbol}/{symbol}_{interval}_{month}_meta.csv",index=True)
-                        except OSError: # If no folder to save into, create it
-                            # Specify the directory
-                            new_directory_path = Path(rf"{path}{symbol}")
-                            # Create the directory
-                            try:
-                                new_directory_path.mkdir()
-                                print(f"New folder '{new_directory_path}' created successfully.")
-                            except FileExistsError: # This error should not occur
-                                pass
-                            except PermissionError:
-                                print(f"Permission denied: Unable to create new directory '{new_directory_path}'.")
-                            except Exception as e:
-                                print(f"An error occurred: {e}")
-                            finally: # Try again (even if other errors)
-                                metaDF.to_csv(rf"{path}{symbol}/{symbol}_{interval}_{month}_meta.csv",index=True) 
-                        
-                        # No need to save index numbering with intraday data
-                        dataDF.to_csv(rf"{path}{symbol}/{symbol}_{interval}_{month}.csv",index=False)
-
-                        # Decide to put 1 or 2 in manifest (based on if requested month is the present month) 
-                        newValue = 1
-                        if month == currentMonth: newValue = 2
-                            
-                        dataManifest.setValue(symbol, interval, month, newValue, sort = False) # No sort to save time
-                        dataManifest.saveManifest(savePath = path, echo = verbose) # Run quietly
-                    
-    print('Current Manifest:')
-    print(dataManifest.DF)
-    return
 ##################################
 ##################################
 
@@ -603,7 +500,6 @@ def DownloadIntraday(path: str, tickers: Iterable[str], intervals: Iterable[int]
 ##################################
 ##################################
 # Auxiliary code
-class APIError(Exception): pass # Error for a API error response (invalid call or API call limit)
 class EnvError(Exception): pass # Error for missing environment variables
 ##################################
 ##################################
