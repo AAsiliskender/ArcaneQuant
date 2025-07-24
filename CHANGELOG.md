@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0] - 2025-07-13
+## [0.2.0] - 2025-07-23
 - Moved more functions from jupyter file to their python code files (i.e. DataManifestManager and SQLManager)
 - Added hint to SQLSave indicating market data requires Ticker and Interval data markers
 - Added fetch capability to ExecuteSQL that returns output (using conn.fetchall() from sqlalchemy)
