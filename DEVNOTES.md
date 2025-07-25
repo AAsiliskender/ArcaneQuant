@@ -1,5 +1,6 @@
 ################# DEVNOTES #################
 ##### STRATEGIC TO DO LIST:
+- Remember to always use bump2version (also fix bump2version before next commit)
 - Install linting/create lint reporting system (for transparency)
 - Create DataManager class to manage DownloadIntraday, ExtractData, and Contextualise (to create)
 - Add REPL and/or GUI for usage

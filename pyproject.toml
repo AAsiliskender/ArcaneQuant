@@ -21,7 +21,7 @@ pythonpath = ["."]
 addopts = "-ra"
 
 
-[bumpversion]
+[tool.bumpversion]
 current_version = "0.1.1"
 commit = true
 tag = true
@@ -35,12 +35,10 @@ sign_tags = false
 allow_dirty = false
 regex = true
 commit_args = ""
-
-[[tool.bumpversion.files]]
-filename = "pyproject.toml"
+files = ["pyproject.toml", "CHANGELOG.md"]
 
 [[tool.bumpversion.files]]
 filename = "CHANGELOG.md"
 search = "^# Changelog\n\n"
-replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n- TODO: Describe changes\n\n"
+replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n{message}\n\n"
 regex = true

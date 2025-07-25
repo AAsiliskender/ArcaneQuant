@@ -1,6 +1,16 @@
 # Changelog
 
-## [0.2.0] - 2025-07-23
+## [0.2.1] - 2025-07-25
+- Creating .bumpversion.cfg and streamlining pipeline
+- Updated tag from v0.1.2 to 0.2.1 (as should be)
+
+## [0.2.0] - 2025-07-25
+- Cleaning up Readme.md and Changelog.md
+- Created DataManager class for general data management operations (such as downloading data or extracting data from .csv or from SQL database)
+- Added type hinting for most parameters (as applicable)
+- Moved DownloadIntraday to DataManager
+
+## [0.1.3] - 2025-07-23
 - Moved more functions from jupyter file to their python code files (i.e. DataManifestManager and SQLManager)
 - Added hint to SQLSave indicating market data requires Ticker and Interval data markers
 - Added fetch capability to ExecuteSQL that returns output (using conn.fetchall() from sqlalchemy)
