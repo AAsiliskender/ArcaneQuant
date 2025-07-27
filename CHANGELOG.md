@@ -1,4 +1,7 @@
-# Changelog
+##### CHANGELOG
+
+## [0.2.2] - 2025-07-27
+- Added update automation script
 
 ## [0.2.1] - 2025-07-25
 - Creating .bumpversion.cfg and streamlining pipeline
@@ -30,3 +33,11 @@
 ### Added
 - Initial early release
 - Working pandas/.csv file management
+
+
+
+
+
+
+
+
