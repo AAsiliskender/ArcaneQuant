@@ -1,6 +1,5 @@
 ################# DEVNOTES #################
 ##### STRATEGIC TO DO LIST:
-- Remember to always use bump2version (also fix bump2version before next commit)
 - Install linting/create lint reporting system (for transparency)
 - Create DataManager class to manage DownloadIntraday, ExtractData, and Contextualise (to create)
 - Add REPL and/or GUI for usage
@@ -12,6 +11,7 @@
 - May need to remove loadData_fromsql (and rename _fromcsv), as ExtractData has both  BUT then do we move loadData into DataManager? Do we want to have all these 'Manager' files be so interconnected?
 
 ### SHORT-TERM TO DO:
+- Make a small script that can automatically git add, commit, bump version and sign (of course needs parameter editing to have correct commit message)
 - DownloadIntraday must be given saving modalities, and the SQL save option must be coded in/working properly.
 - SQLSave
 - Find a place to save meta data into SQL
@@ -46,4 +46,4 @@
 
 
 ### TO ADD AS GIT COMMIT (FUTURE):
-- Created DataManager class for general data management operations (such as downloading data or extracting data from csv or sql)
+

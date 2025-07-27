@@ -19,26 +19,3 @@ where = ["."]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = "-ra"
-
-
-[tool.bumpversion]
-current_version = "0.1.1"
-commit = true
-tag = true
-tag_name = "[{new_version}]"
-tag_message = "Bump version: {current_version} → {new_version}"
-changelog = true
-parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
-serialize = ["{major}.{minor}.{patch}"]
-ignore_missing_version = false
-sign_tags = false
-allow_dirty = false
-regex = true
-commit_args = ""
-files = ["pyproject.toml", "CHANGELOG.md"]
-
-[[tool.bumpversion.files]]
-filename = "CHANGELOG.md"
-search = "^# Changelog\n\n"
-replace = "# Changelog\n\n## [{new_version}] - {now:%Y-%m-%d}\n{message}\n\n"
-regex = true
