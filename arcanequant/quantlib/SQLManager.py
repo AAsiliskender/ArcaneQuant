@@ -1,5 +1,7 @@
 import pandas as pd
 import sqlalchemy
+from typing import Iterable
+from .DataManifestManager import DataManifest
 
 class SQLManager():
     """Placeholder class for package-level structure or future use."""
@@ -12,6 +14,7 @@ class SQLManager():
 # - SQLRepair - Repairs SQL system by remaking all tables and keys, can even resync data
 # - SQLSync - Syncs all data in storage to DataManifest
 # - SQLClear - Clears all row data in SQL (excluding precomputed tables like date/time)
+# - SQLNuke - WIPES ALL DATA, keys, tables in the database (dangerous for only users who store only in SQL database!)
 # - SetKeysQuery - Provide (or execute) query for setting key(s)
 # - DropKeysQuery - Provide (or execute) query for dropping key(s)
 # - ExecuteSQL - Executes provided SQL query (needs engine)
@@ -33,7 +36,7 @@ def SQLSetup(connEngine: sqlalchemy.engine, new = True):
     """
 
     if new:
-        print('Establishing tables and setting all keys to create the relational database...')
+        print('Establishing tables and views...')
         SQLEstablish(connEngine)
         print('Setting up test infrastructure...')
         testSetUpString = '''
@@ -45,9 +48,9 @@ def SQLSetup(connEngine: sqlalchemy.engine, new = True):
                     ALTER USER "testUser" WITH PASSWORD 'testPassword';
                     ALTER DATABASE "testDatabase" OWNER TO "testUser";
                     '''
-        ExecuteSQL(testSetUpString, connEngine)
+        ExecuteSQL(testSetUpString, connEngine, transact=False)
         
-
+    print('Setting all keys to complete the relational database...')
     # TickerTable keys
     SetKeysQuery('tickerTable', 'Ticker', 'primary', engine = connEngine)
     SetKeysQuery('tickerTable', 'TickerID', 'unique', engine = connEngine)
@@ -76,8 +79,13 @@ def SQLSetup(connEngine: sqlalchemy.engine, new = True):
                     ('timeTable','TimeID') ), engine = connEngine)
     SetKeysQuery('marketTable', ('TickerID','Interval'), 'foreign', ref = ('manifestTable',['TickerID','Interval']), engine = connEngine)
 
-    # Can set extra indexes here (hour, or year etc.)
+    # MetaTable keys
+    SetKeysQuery('metaTable', ('TickerID','4. Interval','7. Month'), 'primary', engine = connEngine)
+    SetKeysQuery('metaTable', ('TickerID','DateID','TimeID'), 'foreign', ref = ( ('tickerTable','TickerID'), ('dateTable','DateID'),
+                    ('timeTable','TimeID') ), engine = connEngine)
+    SetKeysQuery('metaTable', ('TickerID','4. Interval'), 'foreign', ref = ('manifestTable',['TickerID','Interval']), engine = connEngine)
 
+    # Can set extra indexes here (hour, or year etc.)
     return
 
 # Establish database by creating necessary tables/columns.
@@ -92,12 +100,13 @@ def SQLEstablish(engine: sqlalchemy.engine):
     clearstring = '''
                     DROP TABLE IF EXISTS "tickerTable" CASCADE;
                     DROP TABLE IF EXISTS "marketTable" CASCADE;
+                    DROP TABLE IF EXISTS "metaTable" CASCADE;
                     DROP TABLE IF EXISTS "dateTable" CASCADE;
                     DROP TABLE IF EXISTS "timeTable" CASCADE;
                     DROP TABLE IF EXISTS "manifestTable" CASCADE;
                 '''
     ExecuteSQL(clearstring, engine)
-
+    from sqlalchemy import types as sqltype
     
     ### Creating TickerTable
     # Set columns and index
@@ -137,6 +146,21 @@ def SQLEstablish(engine: sqlalchemy.engine):
         }
     marketTable.to_sql('marketTable', engine, if_exists='replace', index=False, dtype = datatypes)
 
+    ### Creating MetaTable
+    # Set columns and index
+    metaTable = pd.DataFrame(columns=['1. Information', 'TickerID', 'DateID','TimeID', '4. Interval', '5. Output Size', '6. Time Zone', '7. Month'])
+    # Note: Month is unique to each Ticker/Interval, Date/Time is of last refreshed (not unique to other 3)
+    datatypes = {
+            "1. Information" : sqltype.VARCHAR(),
+            "TickerID": sqltype.SmallInteger(),
+            "DateID": sqltype.Integer(),
+            "TimeID": sqltype.Integer(),
+            "4. Interval": sqltype.SmallInteger(), 
+            "5. Output Size": sqltype.VARCHAR(),
+            "6. Time Zone": sqltype.VARCHAR(),
+            "7. Month": sqltype.CHAR(7)
+        }
+    metaTable.to_sql('metaTable', engine, if_exists='replace', index=False, dtype = datatypes)
 
     ### Creating DateTable and TimeTable (in one command using direct SQL queries)
     wallstring = ""
@@ -197,7 +221,9 @@ def SQLEstablish(engine: sqlalchemy.engine):
     manifestTable.to_sql('manifestTable', engine, if_exists='replace', index=False, dtype = datatypes)
 
     # After tables are created, set up view(s) for extraction from SQL to pandas
+    # In order: stockData, manifestData, metaData
     viewsquery = """
+        DROP VIEW IF EXISTS "stockData";
         CREATE OR REPLACE VIEW "stockData" AS
         SELECT
             tickt."Ticker", -- from tickerTable
@@ -238,6 +264,30 @@ def SQLEstablish(engine: sqlalchemy.engine):
                 JOIN "tickerTable" t ON m."TickerID" = t."TickerID";
             ', col_list);
         END $$;
+
+        DROP VIEW IF EXISTS "metaData";
+        CREATE OR REPLACE VIEW "metaData" AS 
+        SELECT
+            -- Meta data
+            mt."1. Information",
+
+            -- Columns (with IDs) linked to other tables
+            tickt."Ticker" AS "2. Symbol", -- from tickerTable, renamed as '2. Symbol'
+        
+            -- Construct DateTime of Last Refresh Date, from Date + Time
+            -- Date must be DATE (from dateTable) and Time must be TIME (from timeTable)
+            (dt."Date" + tt."Time") AS "3. Last Refreshed",
+        
+            -- Remaining meta data
+            CONCAT(mt."4. Interval"::VARCHAR,'min')::VARCHAR AS "4. Interval", -- Change X::INT into "Xmin"::VARCHAR
+            mt."5. Output Size",
+            mt."6. Time Zone",
+            mt."7. Month"
+
+        FROM "metaTable" mt
+        JOIN "dateTable" dt ON dt."DateID" = mt."DateID"
+        JOIN "timeTable" tt ON tt."TimeID" = mt."TimeID"
+        JOIN "tickerTable" tickt ON tickt."TickerID" = mt."TickerID";
         """
     # The second part of this query makes the manifest view (with Ticker instead of TickerID) in SQL with the
     # columns in the manifestTable, here it has no month cols (as its a new manifestTable), but reusing this
@@ -247,7 +297,7 @@ def SQLEstablish(engine: sqlalchemy.engine):
     return
 
 # Repair SQL table/keys/data
-def SQLRepair(dataManifest: pd.DataFrame = None, connEngine: sqlalchemy.engine = None, dataRepair = True, echo = False):
+def SQLRepair(dataManifest: DataManifest = None, connEngine: sqlalchemy.engine = None, deepRepair = False, dataRepair = True, echo = False):
     """
     Repairs SQL system by remaking all keys (and tables as needed) on a database, and resyncing data to SQL if possible.
     
@@ -276,19 +326,34 @@ def SQLRepair(dataManifest: pd.DataFrame = None, connEngine: sqlalchemy.engine =
     elif not connEngine:
         raise ValueError("You must provide a connection engine through dataManifest.SQLengine or connEngine")
 
-    # Set all keys and establish relational database
-    print(f'Repairing SQL database using connection engine {connEngine}...')
-    try:
-        print('Attempting to drop and reset all keys to recreate the relational database without deleting tables')
-        SQLSetup(connEngine, new = False)
+    # Deep repair operation, remove all tables and all data before remaking it all (careful with usage)
+    if deepRepair:
+        care = input('''⚠️ WARNING: Deep repair operation enabled, this will wipe the relational database of all information before remaking it. ' \
+            'Type "I UNDERSTAND" without quotation marks and in all capital letters to confirm and continue...\n>>>''')
+        if care != "I UNDERSTAND": raise PermissionError("Destructive operation not confirmed. You must type 'I UNDERSTAND' to proceed.")
+        SQLNuke(connEngine = connEngine, ignoreWarn = True)
 
-    except sqlexc.ProgrammingError: # If any table is missing (none should ever be missing), recreate all tables from scratch, then set keys
-        if echo: print('Table(s) missing, recreating all tables before repair...')
+        print('Remaking the database from blank slate...')
         SQLSetup(connEngine, new = True)
 
-    # At the end, sync SQL with .csv files (if dataManifest has a directory provided (i.e. a file storage location))
-    if dataManifest.directory:
-        SQLSync(dataManifest, not dataRepair, echo)
+    # Normal repair operation (repair keys, if missing table also remake tables (not views))
+    else:
+        # Set all keys and establish relational database
+        print(f'Repairing SQL database using connection engine {connEngine}...')
+        try:
+            print('Attempting to drop and reset all keys to recreate the relational database without deleting tables')
+            SQLSetup(connEngine, new = False)
+
+        except sqlexc.ProgrammingError: # If any table is missing (none should ever be missing), recreate all tables from scratch, then set keys
+            if echo: print('Table(s) missing, recreating all tables before repair...')
+            SQLSetup(connEngine, new = True)
+
+        print('Primary repair complete.')
+        # At the end, if data repair desired, sync SQL with .csv files (if dataManifest has a directory provided (i.e. a file storage location))
+        if dataRepair and (dataManifest.directory != "" or dataManifest.directory != None):
+            print('Repairing SQL data using directly stored data: {mode} sync mode.'.format(mode = "Full" if deepRepair else "Fast"))
+            SQLSync(dataManifest, not deepRepair, echo)
+            print('Data repair complete.')
 
     
     return
@@ -310,13 +375,19 @@ def SQLSave(saveDF: pd.DataFrame, engine: sqlalchemy.engine, saveTable: str, ign
     inserting into SQL tables. Also updates tickerTable in SQL if new ticker is detected, and adds new columns to manifestTable
     if new columns detected. (Can potentially be used to add user-defined tables, not tested though.)
     Note:
+    - The DataFrame must be transformed (if needed) before being applied here, this function only modifies the input for ID based
+    columns (Ticker/Symbol and DateTime columns)
     - NoneType (null) values can be added/inserted into rows as long as it does not violate any NOT NULL constraints.
-    - If inserting market data, make sure to label the data with columns for 'Ticker' and 'Interval', otherwise the method will
-    raise a null constraint violation error.
+    - If inserting market data directly (not from DownloadIntraday()), make sure to label the data with columns for 'Ticker' and
+    'Interval', otherwise the method will raise a null constraint violation error.
+    - If meta data is being saved directly (not from DownloadIntraday()), it needs to be transposed from the original download
+    state, the Interval value to be converted to int (from string, like 'Xmin') and the month of the dataset should be added
+    ('YYYY-MM' format). The DataFrame does not require the 'Ticker' or 'Interval' columns to be named as such apriori, this
+    function takes care of that.
     - This function searches for indications of saveTable name. If name is close enough to default table names but incorrect,
     it changes it to defaults, those being 'manifestTable'/'compressedManifestTable' (which looks for letters 'comp' and/or
-    'manifest') and for 'marketTable' (looking for 'market' or 'stock'). Any other names not fitting into any of these
-    descriptions are treated as is, so be weary of capitalisations.
+    'manifest'), 'metaTable' (looking for 'meta') and for 'marketTable' (looking for 'market' or 'stock'). Any other names not
+    fitting into any of these descriptions are treated as is, so be weary of capitalisations in custom table usage.
     """
 
     # Convert name at start (to deal with possible spell errors)
@@ -326,10 +397,16 @@ def SQLSave(saveDF: pd.DataFrame, engine: sqlalchemy.engine, saveTable: str, ign
         saveTable = "manifestTable"
     elif "stock" in saveTable.lower() or "market" in saveTable.lower():
         saveTable = "marketTable"
+    elif "meta" in saveTable.lower():
+        saveTable = "metaTable"
 
     # Convert index into cols (as we will use index = False, and need to access index values)
     saveDF = saveDF.reset_index()
     if ignore_index: saveDF.drop(columns = 'index', axis = 1, inplace = True, errors = 'ignore') # Delete the basic index if it exists (if desired)
+
+    # Convert metaTable columns/values to standard format for SQL (Ticker from 2. Symbol, or 1 instead of '1min' for interval)
+    if saveTable == 'metaTable':
+        saveDF.rename(columns={'2. Symbol':'Ticker', '3. Last Refreshed':'DateTime'}, inplace = True)
 
     # Break down certain columns (if they exist) to be used with relational tables in SQL (tickerTable, dateTable, timeTable etc.)
     # Ticker column
@@ -362,7 +439,7 @@ def SQLSave(saveDF: pd.DataFrame, engine: sqlalchemy.engine, saveTable: str, ign
     if saveTable == 'compressedManifestTable':
         print('To add compressed manifest functionality')
         pass # TODO: ADD IN CODE TO SAVE COMPRESSED MANIFEST (SIMILAR TO STANDARD MANIFEST)
-
+        
     elif saveTable == 'manifestTable':
         # Read existing manifest in SQL
         manifestSQL = pd.read_sql(f'SELECT * FROM "{saveTable}"', engine)
@@ -415,12 +492,12 @@ def SQLSave(saveDF: pd.DataFrame, engine: sqlalchemy.engine, saveTable: str, ign
         """
         ExecuteSQL(updateViewQuery, engine)
     
-    if echo: print('Upserting table into SQL...')
+    if echo: print(f'Upserting data into table "{saveTable}" in SQL...')
     saveDF.to_sql(saveTable, engine, if_exists='append', index = False, method = postgres_upsert, chunksize = 1000000) # Can optimise chunksize if needed
     return
 
 # Sync SQL data by saving from direct storage to SQL form
-def SQLSync(dataManifest, fastSync = False, echo = False):
+def SQLSync(dataManifest: DataManifest, fastSync = False, echo = False):
     """
     Syncs all data in storage indicated by dataManifest directory with SQL database (in upsert mode).
     The data is transferred from .csv to SQL (not the other way around).
@@ -448,9 +525,10 @@ def SQLSync(dataManifest, fastSync = False, echo = False):
         SQLClear(dataManifest.SQLengine, echo)
 
     if echo: print('Syncing data manifest into SQL database')
+    # No need to preprocess DataManifest before saving to SQL
     SQLSave(dataManifest.DF, dataManifest.SQLengine, 'manifestTable', echo = echo)
     
-    if echo: print('Loading each market data file into SQL database')
+    if echo: print('Loading each market and meta data file into SQL database')
     # Sync market table based on dataManifest showing if data exists or not
     # Unique values of ticker
     tickerComponents = list(dataManifest.DF.index.get_level_values(0).unique().values)
@@ -472,13 +550,20 @@ def SQLSync(dataManifest, fastSync = False, echo = False):
                 datapointValue = dataManifest.DF.loc[((ticker,interval),month)]
                 # If file exists, save into SQL
                 if datapointValue == 1 or datapointValue == 2:
-                    fileRead = dataManifest.loadData_fromcsv(ticker, interval, month, echo = echo)
+                    # Load actual and meta data files
+                    fileRead, metaFileRead = dataManifest.loadData_fromcsv(ticker, interval, month, meta = True, echo = echo)
+
+                    # Add ticker/interval to fileRead before saving to SQL
+                    fileRead = DFtoSQLFormat(fileRead, 'market', dataContext=(ticker,interval))
                     SQLSave(fileRead, dataManifest.SQLengine, 'marketTable', echo = echo)
 
+                    # Add month to metaFileRead before saving to SQL
+                    metaFileRead = DFtoSQLFormat(metaFileRead, 'meta', dataContext=month)
+                    SQLSave(metaFileRead, dataManifest.SQLengine, 'metaTable', echo = echo)
     return
 
 # Clear all row data in SQL (excluding precomputed tables like date/time)
-def SQLClear(connEngine, echo = False):
+def SQLClear(connEngine: sqlalchemy.engine, echo = False):
     """
     Clears all data rows in SQL (excluding precomputed date/time dimension tables).
     Inputs:
@@ -488,16 +573,54 @@ def SQLClear(connEngine, echo = False):
     if echo: print('Clearing all datasets in SQL') # TEST THIS FUNCTION
 
     delQuery = '''
-    DELETE FROM "manifestTable";
     DELETE FROM "marketTable";
+    DELETE FROM "metaTable";
+    DELETE FROM "manifestTable";
     DELETE FROM "tickerTable";
     '''
 
     ExecuteSQL(delQuery, connEngine)
     return
 
-# Provide (or execute) query for setting key(s) for a table (after dropping existing one first)
-def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None, echo = False):
+# Wipes all data and tables from database, unsafe for SQL users unless saved elsewhere
+def SQLNuke(connEngine: sqlalchemy.engine, ignoreWarn = False):
+    """
+    Wipes all data and tables/views from SQL database. Use with caution!
+
+    Note:
+    - ignoreWarn used by deepRepair from SQLRepair (as it already warns), advised against setting to True
+    """
+    if not ignoreWarn:
+        care = input('''⚠️ WARNING: This operation will NUKE the relational database of all information. Advise backing up data 
+                     elsewhere before continuing. Type "NUKE" without quotation marks and in all capital letters to confirm and continue...\n>>>''')
+        if care != "NUKE": raise PermissionError("Destructive operation not confirmed. You must type 'NUKE' to proceed.")
+    
+    input(f'Input confirmed, fully wiping SQL database {connEngine}. Press Enter to begin...')
+    print('Nuking database.')
+    
+    nukeQuery = """
+    DO $$ DECLARE
+    r RECORD;
+    BEGIN
+        -- if the schema you operate on is not "current", can swap current_schema() with
+        -- 'public' or something else, then execute LOOP
+
+        -- Drop tables (and dependent view)
+        FOR r IN ( SELECT tablename FROM pg_tables WHERE schemaname = current_schema() ) LOOP
+            EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+        END LOOP;
+
+        -- Drop views (any that may be lingering independently)
+        FOR r IN ( SELECT table_name FROM information_schema.views WHERE table_schema = current_schema() ) LOOP
+            EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(r.table_name) || ' CASCADE';
+        END LOOP;
+    END $$;
+    """
+    ExecuteSQL(nukeQuery,connEngine)
+    return
+
+# Provide (or execute) query for setting key(s) for a table (after dropping existing one first) # 
+def SetKeysQuery(tableName, keys: str | Iterable[str], kType = 'primary', ref: tuple[str,Iterable[str]] | Iterable[Iterable[str]] = None, engine: sqlalchemy.engine = None, echo = False):
     """
     Provides query to set the keys of a table (from a column(s)) in an SQL database. You must specify the sort of key being set
     (default is primary) and the and the key name (column(s)) and additional reference data, if applicable. Uses postgreSQL dialect.
@@ -736,7 +859,7 @@ def SetKeysQuery(tableName, keys, kType = 'primary', ref = None, engine = None, 
     return wallstring
 
 # Provide (or execute) query for dropping key(s) for a table (without replacing with another one)
-def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine = None, echo = False):
+def DropKeysQuery(tableName, keys: str | Iterable[str] = None, kType = 'primary', ref: tuple[str,Iterable[str]] | Iterable[Iterable[str]] = None, engine: sqlalchemy.engine = None, echo = False):
     """
     Provides query to delete the keys of a table in an SQL database. You must specify the sort of key being dropped
     (default is primary) and the key name (column(s)) and additional reference data, if applicable. Uses postgreSQL dialect.
@@ -920,25 +1043,191 @@ def DropKeysQuery(tableName, keys = None, kType = 'primary', ref = None, engine 
     return wallstring
 
 # Execute SQL query
-def ExecuteSQL(query, engine, fetch = False):
+def ExecuteSQL(query: str, engine: sqlalchemy.engine, fetch = False, transact = True):
     """
     Executes a given query (in string) in SQL using the given connection engine.
     Enabling fetching provides the output from SQL (in whatever format it may be).
     Note that if fetch is enabled but no output is obtained it will raise an error.
+    Note that if transact is False, nothing is fetched (use only for deleting databases).
     """
     from sqlalchemy import text
 
-    with engine.connect() as conn:
-        result = conn.execute(
-            text( query )
-        )
-        if fetch:
-            rows = result.fetchall()
-            conn.commit()  # Required for Data Definiton Language (DDL) statements
-            return rows
+    # If no transaction use autocommit option in psycopg2 (query must be split into lines to avoid a bug)
+    if not transact:
+        stripQuery = query.strip().split('\n') # Split into individual lines
+        for line in stripQuery:
+            if line.strip() == '': continue # Skip empty lines
+
+            with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                conn.execute(text(line))
+        return
+
+    else: # In normal execute it is a transaction block
+        with engine.connect() as conn:
+            result = conn.execute( text( query ) )
+            
+            # If option to fetch output is called use .fetchall()
+            if fetch: 
+                rows = result.fetchall()
+                conn.commit()  # Required for Data Definiton Language (DDL) statements
+                return rows
+            else:
+                conn.commit()  # Required for Data Definiton Language (DDL) statements
+                return
+
+# Convert dataset from DataFrame to SQL acceptable format
+def DFtoSQLFormat(dataFrame: pd.DataFrame, dfType: str, dataContext: tuple[str, int] | str) -> pd.DataFrame:
+    """
+    Converts a given DataFrame into a format acceptable by the SQL database (usable by SQLSave()). Provide only dataset for one group, e.g.
+    data for a single Ticker, in a single Interval over a single Monthly period (unique [Ticker, Interval, Month]).
+    Requires context in the form of type (of DataFrame used), and additional information (such as ticker, interval
+    and/or month period).
+
+    Inputs:
+    - dataFrame - DataFrame of data to be converted into SQL acceptable format.
+    - dfType - String indicating what type of DataFrame is being converted. Acceptable inputs are:
+        > "stock" or "market" or "actual" indicating stock/market data
+        > "meta" indicating the corresponding meta data is to be converted
+        > "comp" indicating compressed DataManifest data
+        > Using "manifest" will return the inputted DataFrame as DataManifest.DF is ready for SQL as-is
+    - dataContext - String and Integer or only String - indicating the context of the data - being the Ticker and Interval
+    of the stock data, or the Year-Month of the data period as a string. Provide in order.
+
+    Note:
+    - Important to provide a single group of data (a single Ticker, a single Interval for a single Month) otherwise the SQL
+    uploaded data will be incorrect.
+    - For converting stock data, provide context as [Ticker, Interval].
+    """ ## TODO: ADD TEXT FOR COMPRESSED DATAFRAME 
+    if dfType.lower() in ["stock", "market", "actual"]:
+        if isinstance(dataContext, str): raise TypeError('Provided dataContext must be an iterable of a string and integer')
+        dataFrame['Ticker'] = dataContext[0]
+        dataFrame['Interval'] = dataContext[1]
+    
+    elif dfType.lower() == "manifest":
+        input("Inputted dfType as 'manifest', no changes needed, returning inputted DataFrame. Press Enter to continue or CTRL+C to abort.")
+    
+    elif "meta" in dfType.lower():
+        if not isinstance(dataContext,str): raise TypeError('Provided dataContext must be a string of the year-month period.')
+        # Transpose
+        dataFrame = dataFrame.T
+
+        # Remove 'min' from the interval row
+        interval = int(dataFrame['4. Interval'].iloc[0].split('m')[0])
+        dataFrame['4. Interval'] = interval
+
+        # Add month row
+        dataFrame['7. Month'] = dataContext        
+
+    elif "comp" in dfType.lower():
+        input("Compressed Manifest form not available yet. To be developed soon. Enter to continue.")
+        #COMPRESSED MANIFEST
+    else:
+        raise ValueError("The dfType must be inputted as one of 'stock', 'market', 'actual', 'meta', 'comp', or 'manifest'.")
+    
+    return dataFrame
+
+# Convert dataset from DataFrame to SQL acceptable format
+def SQLtoDFFormat(dataFrame: pd.DataFrame, dfType: str, convertDatetime = False, raiseError = False) -> pd.DataFrame: # CAHNGE INPUT PARAMS
+    """
+    Converts a given DataFrame (recieved from the output of a SQL query using pd.read_sql()) into a format acceptable
+    by the ArcaneQuant ecosystem. Provide only dataset for one group, e.g. data for a single Ticker, in a single
+    Interval over a single Monthly period (unique [Ticker, Interval, Month]).
+    Does not work if dataset has more than one Ticker or Interval (for stock data), and more than one Ticker or Month
+    (for meta data); can select the output to be the original input or raise an Error if failure happens. 
+
+    Inputs:
+    - dataFrame - DataFrame of data to be converted into SQL acceptable format.
+    - dfType - String indicating what type of DataFrame is being converted. Acceptable inputs are:
+        > "stock" or "market" or "actual" indicating stock/market data
+        > "manifest" indicating DataManifest data
+        > "meta" indicating the corresponding meta data is to be converted
+        > "comp" indicating compressed DataManifest data
+        
+    Optional input:
+    - convertDatetime - Boolean indicating to convert any Date/Time columns to datetime64[ns] format. If False, converts to string instead.
+    - raiseError - Boolean indicating if error should be raised if failure of operation (otherwise return original input
+    on failure)
+        
+    Note:
+    - The relevant columns must use their default names:
+        > The ticker column must be named 'Ticker' in the stock DataFrame, and '2. Symbol' in the meta DataFrame
+        > The interval column must be named 'Interval' in the stock DataFrame and '4. Interval' in the meta DataFrame.
+        > The month column must be named '7. Month' in the meta DataFrame.
+    - The operations here are simple but used to standardise the I/O of dataframes through SQL.
+    """ ## ADD TEXT FOR COMPRESSED DATAFRAME
+    if dfType.lower() in ["stock", "market", "actual"]:
+        # Guard against if already done/no cols
+        if not ('Ticker' in dataFrame.columns and 'Interval' in dataFrame.columns):
+            if raiseError: raise ValueError('Inputted DataFrame has no ticker and/or interval column.')
+            else:
+                print('Inputted DataFrame has no ticker and/or interval column. Returning input.')
+                return dataFrame # Bad input/no raiseError, return initial input
+
+        # Check for multiple Ticker or Interval
+        tickerUniques = list(dataFrame['Ticker'].unique())
+        intervalUniques = list(dataFrame['Interval'].unique())
+
+        # If not more than 1 on both, drop Ticker/Interval columns
+        if len(tickerUniques) == 1 and len(intervalUniques) == 1:
+            dataFrame.drop(columns=['Ticker', 'Interval'], inplace = True)
+
+        # If convertDatetime, change to datetime (no actual change), else convert to string.
+        if convertDatetime:
+            dataFrame['DateTime'] = pd.to_datetime(dataFrame['DateTime'], format = "%Y-%m-%d %H:%M:%S")
         else:
-            conn.commit()  # Required for Data Definiton Language (DDL) statements
-            return
+            dataFrame['DateTime'] = dataFrame['DateTime'].astype(str)
+        # Reset index as index taken from SQL (does not always start at 0)
+        dataFrame.reset_index(drop=True, inplace=True)
+    
+    elif dfType.lower() == "manifest":
+        # Guard against if already done/no cols
+        if not ('Ticker' in dataFrame.columns and 'Interval' in dataFrame.columns):
+            if raiseError: raise ValueError('Inputted DataFrame has no ticker and/or interval column.')
+            else:
+                print('Inputted DataFrame has no ticker and/or interval column. Returning input.')
+                return dataFrame # Bad input/no raiseError, return initial input
+
+        dataFrame.index = pd.MultiIndex.from_frame(dataFrame[['Ticker','Interval']])
+        
+    elif "meta" in dfType.lower():
+        # Guard against if already done/no cols
+        if not ('2. Symbol' in dataFrame.columns and '4. Interval' in dataFrame.columns and '7. Month' in dataFrame.columns):
+            if raiseError: raise ValueError('Inputted DataFrame has no ticker, interval and/or month column.')
+            else:
+                print('Inputted DataFrame has no ticker, interval and/or month column. From .csv or already processed. Fixing index and returning input.')
+                # Special treatment here as post-process after filtering, col names may need fix if coming from .csv
+                if len(dataFrame.columns) > 1: dataFrame.columns = [i for i in range(len(dataFrame.columns))] # Number if more than one
+                elif len(dataFrame.columns) == 0: dataFrame.set_axis(['Meta Data'], axis = 1, copy = False) # Name 'Meta Data' if one (originally obtain from API)
+
+                return dataFrame # Bad input/no raiseError, return input
+
+        # Check for multiple Ticker or Interval or Month
+        tickerUniques = list(dataFrame['2. Symbol'].unique())
+        intervalUniques = list(dataFrame['4. Interval'].unique())
+        monthUniques = list(dataFrame['7. Month'].unique())
+
+        # If not more than 1 on all, convert interval to 'Xmin' from X
+        if len(tickerUniques) == 1 and len(intervalUniques) == 1 and len(monthUniques) == 1:
+            # Drop month, change (only) row index name to 'Meta Data'
+            dataFrame.drop(columns=['7. Month'], inplace=True)
+            dataFrame.index =['Meta Data' for ind in dataFrame.index]
+        else:
+            # Reset index as more than one line (can't use 'Meta Data' for all cols)
+            dataFrame.reset_index(drop=True, inplace=True)
+
+        # If convertDatetime, change to datetime (no actual change), else convert to string.
+        if convertDatetime:
+            dataFrame['3. Last Refreshed'] = pd.to_datetime(dataFrame['3. Last Refreshed'], format = "%Y-%m-%d %H:%M:%S")
+        else:
+            dataFrame['3. Last Refreshed'] = dataFrame['3. Last Refreshed'].astype(str)
+        # Transpose
+        dataFrame = dataFrame.T
+
+    elif "comp" in dfType.lower():
+        input("Compressed Manifest form not available yet. To be developed soon. Enter to continue.")
+        #TODO: COMPRESSED MANIFEST TO COMPLETE HERE
+
+    return dataFrame
 
 # Applying upsert (update-insert) in postgres database
 def postgres_upsert(table, conn, keys, data_iter):

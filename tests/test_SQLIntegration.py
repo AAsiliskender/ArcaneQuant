@@ -19,8 +19,8 @@ from sqlalchemy import types as sqltype
 
 
 # My packages
-from arcanequant.quantlib.DataManifestManager import DataManifest
-from arcanequant.quantlib.SQLManager import ExecuteSQL, SetKeysQuery, DropKeysQuery
+from arcanequant import DataManifest
+from arcanequant import ExecuteSQL, SetKeysQuery, DropKeysQuery
 from test_SQLExecution import setup_SQLtestengine
 
 # need sqlalchemy (and docker imports, after learning to set up docker)

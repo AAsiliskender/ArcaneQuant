@@ -1,0 +1,21 @@
+## To download packages using pip
+import sys #! allows to use command terminal code in here
+#!{sys.executable} --version
+#!pip install html5lib
+#!pip install bs4
+#!pip install yfinance
+#!pip install tradingview-scraper
+#!pip install --upgrade --no-cache tradingview-scraper
+#!pip install selenium
+#!pip install sqlalchemy
+#!pip install python-dotenv
+#!pip install pandas-ta
+#!pip install pytest
+#!pip install python-on-whales
+# Security testing
+#!pip install bandit
+
+# Cmd terminal environment install (psycopg2)
+#!pip install psycopg2-binary 
+# Conda environment install
+#!conda install -c anaconda psycopg2 

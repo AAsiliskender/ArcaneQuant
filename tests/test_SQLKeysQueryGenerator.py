@@ -2,8 +2,8 @@
 import pytest
 
 # My packages
-from arcanequant.quantlib.DataManifestManager import DataManifest
-from arcanequant.quantlib.SQLManager import SetKeysQuery, DropKeysQuery
+from arcanequant import DataManifest
+from arcanequant import SetKeysQuery, DropKeysQuery
 
 ################################################################
 #####################  SET KEYS QUERY TEST  ####################
