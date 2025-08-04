@@ -1,32 +1,6 @@
-###### -- Python Script in Jupyter to access, create and test financial data and models
 ###### -- By Ahmed Asiliskender, initial write date 25 June 2024
-###### -- May also access MATLAB scripts through here and .py files.
 
 ### Here we initialise important libraries and variables.
-
-## To download packages using pip
-import sys #! allows to use command terminal code in here
-#!{sys.executable} --version
-#!pip install html5lib
-#!pip install bs4
-#!pip install yfinance
-#!pip install tradingview-scraper
-#!pip install --upgrade --no-cache tradingview-scraper
-#!pip install selenium
-#!pip install sqlalchemy
-#!pip install python-dotenv
-#!pip install pandas-ta
-#!pip install pytest
-#!pip install python-on-whales
-# Security testing
-#!pip install bandit
-
-# Cmd terminal environment install (psycopg2)
-#!pip install psycopg2-binary 
-# Conda environment install
-#!conda install -c anaconda psycopg2 
-
-
 
 # Import pandas (python data analysis lib) and data analysis packages
 #%matplotlib inline
@@ -73,10 +47,13 @@ import pytest
 #import warnings
 
 # My packages
-from arcanequant.quantlib.DataManifestManager import DataManifest
-from arcanequant.quantlib.SQLManager import SetKeysQuery, DropKeysQuery, ExecuteSQL
+# For when 'from arcanequant import *' is used
+__all__ = ["DataManifest",
+           "DownloadIntraday", "ExtractData",
+           "SQLSetup", "SQLEstablish", "SQLRepair", "SQLSave", "SQLSync", "SQLClear", "SQLNuke", "SetKeysQuery", "DropKeysQuery", "ExecuteSQL", "DFtoSQLFormat", "SQLtoDFFormat"]
 
-
+# Relative imports (child) (i.e. from arcanequant import DataManifest (relies on quantlib folder))
+from .quantlib import *
 
 
 # Paid APIs, (not used, left here)

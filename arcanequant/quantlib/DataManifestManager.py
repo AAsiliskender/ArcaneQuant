@@ -268,12 +268,11 @@ class DataManifest():
         return
 
     # Method to load .csv market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromcsv(self, ticker: str, interval: int, month: str, convert_DateTime = False, echo = True) -> pd.DataFrame:
+    def loadData_fromcsv(self, ticker: str, interval: int, month: str, convert_DateTime = False, meta = False, echo = True) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame]:
         """
         This method loads a .csv file of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
         The method assumes the file naming format "{ticker}_{interval}_{month}.csv" where month is YYYY-MM ("2025-01") on the .csv files 
-        The method returns the data frame of stock data.
-        Note: This method only returns a single monthly period, for custom length periods, use ExtractData.
+        The method returns the data frame of stock data (and meta data if 'meta' enabled).
 
         Input:
         - ticker - string of ticker name (i.e. "NVDA")
@@ -282,22 +281,34 @@ class DataManifest():
 
         Optional inputs:
         - convert_DateTime - Boolean indicating to read the DateTime column as datetime64 type (or as a string)
-        - echo - Boolean that provides more output during execution.
+        - meta - Boolean that outputs the relevant meta data as well (in a tuple alongside the actual stock data as two DataFrames)
+        - echo - Boolean that provides greater description during execution.
+        
+        Note:
+        > This method only returns a single monthly period, for custom length periods, use ExtractData.
+        > If meta data output is enabled, make sure recieve the tuple output (as opposed to a single DataFrame output when meta=False)
         """
         if ( not isinstance(self.directory, str) ) or self.directory == "": raise TypeError('The data manifest directory pointer must be a string pointing to a valid path/folder.')
         
         fileString = r'' + ticker + "_" + str(interval) + "_" + month
-        if echo: print(rf"Loading file data: {fileString}.csv")
-        
+        if echo:
+            print(rf"Loading data file: {fileString}.csv")
+            if meta: print(rf"Loading meta data file: {fileString}_meta.csv")
+
         fileRead = pd.read_csv(rf"{self.directory}{ticker}/{fileString}.csv")
+        metaFileRead = None
+        if meta: metaFileRead = pd.read_csv(rf"{self.directory}{ticker}/{fileString}_meta.csv", index_col=0)
+
         # Convert datetime column from string to datetime64
         if convert_DateTime:
             fileRead['DateTime'] = pd.to_datetime(fileRead['DateTime'], format = "%Y-%m-%d %H:%M:%S")
+            if meta: metaFileRead.loc['3. Last Refreshed'] = pd.to_datetime(metaFileRead.loc['3. Last Refreshed'], format = "%Y-%m-%d %H:%M:%S")
 
-        return fileRead
+        if meta: return (fileRead, metaFileRead)
+        else: return fileRead
 
     # Method to load database market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromsql(self, ticker: str, interval: int, month: str, convert_DateTime = False, echo = True) -> pd.DataFrame:
+    def loadData_fromsql(self, ticker: str, interval: int, month: str, convert_DateTime = False, postProcess = True, meta = False, echo = True) -> pd.DataFrame:
         """
         This method loads a part of the database of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
         The method assumes the postgreSQL information from self.SQLengine
@@ -311,25 +322,21 @@ class DataManifest():
         
         Optional inputs:
         - convert_DateTime - Boolean indicating to read the DateTime column as datetime64 type (or as a string)
+        - postProcess - Boolean that converts the direct output from SQL into the original form used to save into SQL
+        - meta - Boolean that outputs the relevant meta data as well (in a tuple alongside the actual stock data as two DataFrames)
         - echo - Boolean that provides more output during execution.
         """
-        
-        xd = ExtractData(self, "stockTable", month, month, fromSQL = False, condition = None, ticker = [ticker])
+        from .DataManager import ExtractData
+        if echo: print('Extracting data from SQL database')
 
-        fileRead=0 # TO DELETE OR COMPLETE
-
-
-
-        if convert_DateTime:
-            fileRead['DateTime'] = pd.to_datetime(fileRead['DateTime'], format = "%Y-%m-%d %H:%M:%S")
-
-        return fileRead
-    
-    def convertDataSQL(self, ticker, interval, month, echo = False):
-        pass # Move to DataManager (will convert to a SQL usable format (i.e. add ticker name and column if it does not exist)) (MAYBE NOT NEEDED)
+        sqlDF = ExtractData("stockData", month, month, self, fromSQL = True, postProcess=postProcess, convertDatetime=convert_DateTime, Ticker = ticker, Interval = interval)
+        if meta:
+            metaSQLDF = ExtractData("metaData", month, month, self, fromSQL = True, postProcess=postProcess, convertDatetime=convert_DateTime, condition=lambda df: (df['2. Symbol'] == ticker) & (df['4. Interval'] == f"{interval}min") )
+            return (sqlDF, metaSQLDF)
+        else: return sqlDF
     
     # Method to save manifest data into file
-    def saveManifest(self, saveTo = 'both', savePath = "", echo = True):
+    def saveManifest(self, saveTo = 'json', savePath = "", echo = True):
         """
         This method saves the DataFrame in the DataManifest class. Two methods are available:
         One saves into a file with the given directory in a .json format.
@@ -401,7 +408,7 @@ class DataManifest():
                     print(f"An error occurred, skipping connection engine creation: {e}")
                     
             if not skipEngine: # Run if engine already exists or just created 
-                from arcanequant.quantlib.SQLManager import SQLSave
+                from .SQLManager import SQLSave
                 SQLSave(self.DF, self.SQLengine, 'manifestTable', ignore_index = True, echo = False)
                 if echo: print('Saved to SQL successfully')
         
@@ -442,7 +449,9 @@ class DataManifest():
             elif path == "":
                 # Try use self.directory (if this is "" or None, raise error)
                 if self.directory == None or self.directory == "":
-                    raise ValueError('You must provide a valid load directory string')
+                    input('⚠️ WARNING: No valid load directory detected, returning empty DataManifest. Press Enter to continue, or CTRL+C to abort.')
+                    self.DF = pd.DataFrame()
+                    return
                 else:
                     path = self.directory
 
