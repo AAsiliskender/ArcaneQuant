@@ -11,6 +11,24 @@
 
 
 ### SHORT-TERM TO DO:
+- Expose data being used (tabs/tables etc.)
+- Complete DataManifestController:
+    > Save and validate buttons
+    > Save as operation vs save (if save location already exists)
+
+- Complete DataController:
+    > Get way to modify listview
+    > Get way to make lists in an out of focus
+    > Sort ascending or descending on header click
+- Popup (for warnings etc.)
+- Make a way to close tabs/remove data from tabsModel
+- Show graphs
+- other stuff (so much to do!)
+
+- Have a way to store existing processed data/analysis and load (dataframes)
+
+- Create a check for equality of DataManifests
+
 - DownloadIntraday must be given saving modalities, and the SQL save option must be coded in/working properly.
 - Make code to identify if files in validateManifest() should be numbered as 1 or 2 in manifest (identify creation/modify date and check if it is the month of the data, if so = 2)
 - Create SQLLoad (sync from direct data files to database - reverse of SQLSync)
@@ -19,6 +37,10 @@
 - Move ExtractData etc. into a file and remove from jupy
 - Create Contextualise (use meta-data to fix stuff like date-time)
 - Enable jupy to use these files when running other stuff (also increases work speed)
+
+### CURRENT BUGS:
+- Using database/sql only to load datamanifest causes bugs with being able to load unit data (green when checking direct load)
+- Loading from sql is slow (for some reason)
 
 ## OPTIONAL TO DO:
 - Figure out a cross validation for SQLSync or validateManifest, metaTable also acts as a manifest
@@ -41,20 +63,19 @@
 - ExtractData might need to have the non-temporal filters (ticker, interval etc.) be done in SQL to save time
 
 ### THIS GIT COMMIT:
-- Cleaned up some code to output manifest, stock and meta data in one of 3 formats; SQL-acceptable, API-outputted (and ArcaneQuant-compatible), and full-data (also ArcaneQuant-compatible)
-- Added ExtractData functionality to extract meta data from SQL
-- Created SQLNuke function to clear SQL database of all information (use wisely)
-- Added SQLNuke use to SQLRepair for a deepRepair option
-- Added function SQLtoDFFormat, takes DataFrames and converts to standard format where applicable (if a unit dataset i.e. 1 ticker,interval and month, converts to standard, otherwise keeps critical markers).
-- Added DFtoSQLFormat, taking DataFrames from ArcaneQuant direct file data usable format and converting to SQL acceptable formats.
-- Added transact option to ExecuteSQL to execute multi-line autocommit queries such as DROP USER/DATABASE, ALTER USER/DATABASE.
-- Added functionality to save meta data to SQL (setting up tables/keys, saving from .csv and loading from SQL back into original API format).
-- Reorganised relative imports in ./arcanequant and ./arcanequant/quantlib folders.
-- Added guard function for inputting empty manifest for ExtractData (when not using SQL).
-- Added return condition for using DataManifest.loadManifest() with an empty load path (returns empty pd.DataFrame)
-- Added option to use DataManifest directly; or use either of a storage path for DataManifest, or sqlalchemy connection engine as inputs for using DownloadIntraday()
-- Added SQL (and both direct and SQL) save optionality for DownloadIntraday()
-- Moved ExtractData() from jupyter file to DataManager
+- Created code in Jupyter file that checks data units (a ticker, interval, month) in database also exists in direct files; if missing, saves database data into direct form.
+- Created app.py with GUI to allow intuitive use. Currently contains (incomplete functionality):
+    > DataManifestController for loading/saving datamanifests
+    > DataController for downloading data and extracting data
+    > TabManager (to be renamed) for creating new tabs for tables/graphs
+    > TabView (to be renamed) for showing actual data
+- To be added later:
+    > SQLController for SQL based operations (setup, repair etc.)
+    > ViewManager (to be renamed) for editing graph
+    > QuantController (to be renamed) for analytical ops
+    > CLIOperator (to be renamed) for direct CLI usage in-app
+- Created backendInterfacer.py to communicate information between QML-Python
+
 
 ### TO ADD AS GIT COMMIT (FUTURE):
 
