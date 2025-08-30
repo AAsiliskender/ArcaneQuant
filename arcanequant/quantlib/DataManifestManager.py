@@ -67,7 +67,6 @@ class DataManifest():
     > reduceManifest - Culls and rows and columns full of zeroes
     > loadData_fromcsv - Loads actual data (of point indicated in manifest) from .csv file
     > loadData_fromsql - Loads actual data (of point indicated in manifest) from database
-    > convertDataSQL - Loads actual data (of point indicated in manifest) and saves into SQL database
     """
         
     def __init__(self):
@@ -78,7 +77,7 @@ class DataManifest():
         self.fileName = 'dataManifest'
         self.SQLengine = None
         
-        print('Data Manifest Initialised')
+        print('Data Manifest Initialised') # Also runs during startup
 
     def __str__(self):
         return f'DataManifest with filename "{self.fileName}" of directory "{self.directory}" and SQL engine {self.SQLengine}.'
@@ -168,14 +167,16 @@ class DataManifest():
         return
 
     # Method to create and link an SQL connection engine and link to class instance
-    def connectSQL(self, dbcred = 'SQLlogin', echo = True):
+    def connectSQL(self, dbcred = 'SQLlogin', path: str = ".", echo = True):
         """
         Creates connection engine and links to class instance (self.SQLengine) for the database given the requisite details.
         You must have already set up SQL and a database to use this functionality.
 
         Input:
-        - dbcred - String name of the file (not including file extension) containing the connection details.
-        Optional Input:
+        - dbcred - String name of the file (not including file extension) containing the connection details
+
+        Optional Inputs:
+        - path - String of relative or absolute path of directory the file named dbcred is in
         - echo - Boolean indicating method verbosity
 
         The file must be an .env file with the following keys:
@@ -197,8 +198,11 @@ class DataManifest():
         PORT=5432
         DBNAME=databasename
         """
+        # If given path empty or relative (working directory) use basepath (main.py's directory)
+        basePath = Path(".").resolve()
+        if path in ("", ".", basePath): path = "."
 
-        env_path = Path(".") / f"{dbcred}.env" # Environment variables file must be same folder as this code
+        env_path = Path(path) / f"{dbcred}.env" # Environment variables file must be same folder as this code
         load_dotenv(dotenv_path=env_path, override=True)
         if not (os.path.isfile(env_path)):
             raise FileNotFoundError(f"The environment file ({env_path}) does not exist")
@@ -288,7 +292,8 @@ class DataManifest():
         > This method only returns a single monthly period, for custom length periods, use ExtractData.
         > If meta data output is enabled, make sure recieve the tuple output (as opposed to a single DataFrame output when meta=False)
         """
-        if ( not isinstance(self.directory, str) ) or self.directory == "": raise TypeError('The data manifest directory pointer must be a string pointing to a valid path/folder.')
+        if ( not isinstance(self.directory, str) ) or self.directory == "":
+            raise TypeError('The data manifest directory pointer must be a string pointing to a valid path/folder.')
         
         fileString = r'' + ticker + "_" + str(interval) + "_" + month
         if echo:
@@ -302,13 +307,14 @@ class DataManifest():
         # Convert datetime column from string to datetime64
         if convert_DateTime:
             fileRead['DateTime'] = pd.to_datetime(fileRead['DateTime'], format = "%Y-%m-%d %H:%M:%S")
-            if meta: metaFileRead.loc['3. Last Refreshed'] = pd.to_datetime(metaFileRead.loc['3. Last Refreshed'], format = "%Y-%m-%d %H:%M:%S")
+            if meta:
+                metaFileRead.loc['3. Last Refreshed'] = pd.to_datetime(metaFileRead.loc['3. Last Refreshed'], format = "%Y-%m-%d %H:%M:%S")
 
         if meta: return (fileRead, metaFileRead)
         else: return fileRead
 
     # Method to load database market data based on the path of the class, and inputted parameters (ticker, interval, month).
-    def loadData_fromsql(self, ticker: str, interval: int, month: str, convert_DateTime = False, postProcess = True, meta = False, echo = True) -> pd.DataFrame:
+    def loadData_fromsql(self, ticker: str, interval: int, month: str, convert_DateTime = False, postProcess = True, meta = False, echo = True) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame]:
         """
         This method loads a part of the database of stock data, based on the path of the class, and inputted parameters (ticker, interval, month)
         The method assumes the postgreSQL information from self.SQLengine
@@ -361,8 +367,8 @@ class DataManifest():
         if saveTo.lower() == 'json' or saveTo.lower() == 'both':
             # If savePath empty, set self.directory as savePath, otherwise do other way around
             # If both empty then raise error first
-            if savePath == "" or savePath == None:
-                if self.directory == None or self.directory == "":
+            if savePath == "" or savePath is None:
+                if self.directory is None or self.directory == "":
                     raise ValueError('A path was not provided, and this DataManifest does not have a prior saved path. You must provide a path to save to.')
                 else:
                     # Update in reverse, obtain from pre-existing self.directory
@@ -416,13 +422,14 @@ class DataManifest():
 
 
     # Method to load manifest data and convert into Multi-Index DataFrame
-    def loadManifest(self, loadFrom = 'direct', path = "", echo = True):
+    def loadManifest(self, loadFrom: str = 'direct', path: str = "", fileName: str = None, echo = True):
         """
         This method loads up a manifest file into the DataManifest class' DataFrame attribute.
         Inputs:
         - loadFrom - String indicating where to load from, 'direct' to load from '.json' file, and 'database'
         to load from the SQL database
         - path - String of the directory of the manifestFile (required only for 'direct' load)
+        - fileName - String of the name of the file (excluding file extension)
         - echo - Boolean indicating method verbosity
         Notes:
         - If the path is "" or None, then the method tries to use the DataManifest's self.directory attribute
@@ -434,12 +441,16 @@ class DataManifest():
 
         # Database load method
         if loadFrom == 'database':
-            if self.SQLengine == None:
+            if self.SQLengine is None:
                 raise ValueError('You must provide a connection engine to use to load the manifest from.')
             
             if echo: print(f'Loading manifest view from engine: {self.SQLengine}')
             
             self.DF = pd.read_sql('SELECT * FROM "manifestData";', self.SQLengine, index_col=['Ticker','Interval'])
+
+            from .SQLManager import SQLtoDFFormat
+            self.DF = SQLtoDFFormat(self.DF, 'manifest', raiseError=False)
+
             return
 
         # Direct load method
@@ -448,7 +459,7 @@ class DataManifest():
                 raise TypeError('You must provide a valid path to load the manifest from.')
             elif path == "":
                 # Try use self.directory (if this is "" or None, raise error)
-                if self.directory == None or self.directory == "":
+                if self.directory is None or self.directory == "":
                     input('⚠️ WARNING: No valid load directory detected, returning empty DataManifest. Press Enter to continue, or CTRL+C to abort.')
                     self.DF = pd.DataFrame()
                     return
@@ -456,23 +467,29 @@ class DataManifest():
                     path = self.directory
 
             # Update class-file link details
-            self.directory = path
+            self.directory = path # Directory update
+            if (fileName is not None and fileName != ""): # File name update
+                self.fileName = fileName
+            elif (self.fileName is None or self.fileName == ""):
+                raise ValueError("You must provide a file name before (DataManifest.fileName) or at load.")
 
             filepath = path + self.fileName + '.json'
             if echo: print('Load path/name: ' + filepath) 
-            
+
             # Here we load the .json file before converting into MIDF
             with open(filepath,) as manifestLoad: # Default is read mode
                 # Note: manifestJSON is the string version of loadJSON (dict form), difference is None is null in JSON form
                 loadJSON = json.load(manifestLoad)
-            
+
             # After loading json (dict form and None) need to convert to json form (string form and null) to use in pandas
             stringJSON = json.dumps(loadJSON)
             
             # Here we read the JSON form to convert into MIDF and process it to return to original form
             # We don't use json.load as we parse into DF not dict
             self.DF = pd.read_json(StringIO(stringJSON))
-            
+
+            #self.DF = pd.DataFrame(data=loadJSON) # Free time saving method (skip bullshit) (save 0.01 seconds)
+
             # Convert the strings of the 'tuples' in the index into a tuple and put into list to recreate the MultiIndex
             indexlist=[literal_eval(x) for x in self.DF.index]
             
@@ -485,7 +502,7 @@ class DataManifest():
             # Convert the full datetime month representation to only Year-Month (while keeping it string)
             # Code works if column is both originally string or datetime representation
             if isinstance(self.DF.columns, pd.Index):
-                self.DF.columns = pd.to_datetime(self.DF.columns,format="%Y-%m")
+                self.DF.columns = pd.to_datetime(self.DF.columns, format="%Y-%m")
                 self.DF.columns = self.DF.columns.strftime("%Y-%m")
             elif isinstance(self.DF.columns, pd.DatetimeIndex):
                 self.DF.columns = self.DF.columns.strftime("%Y-%m")
@@ -496,7 +513,6 @@ class DataManifest():
             # Convert all values to int (1 or 0)
             for column in self.DF.columns:
                 self.DF[column] = self.DF[column].astype(int)
-            
             return
 
 ##################################

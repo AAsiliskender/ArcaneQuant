@@ -80,6 +80,10 @@ def DownloadIntraday(tickers: Iterable[str], intervals: Iterable[int], months: I
                 dataManifest.directory = savePath
             elif dataManifest.directory == None or dataManifest.directory == "": # If dataManifest directly provided but empty directory
                 dataManifest.directory = savePath
+            else: # If dataManifest.directory already exists, change savePath to that
+                # NOTE: Not necessary but makes things easier to have one data in two variables (can swap in path but may get confusing)
+                savePath = dataManifest.directory
+                
 
             dataManifest.loadManifest(path = dataManifest.directory, loadFrom = 'direct')
         except FileNotFoundError:
@@ -94,16 +98,15 @@ def DownloadIntraday(tickers: Iterable[str], intervals: Iterable[int], months: I
         if dataManifest == None:
             dataManifest = DataManifest()
             dataManifest.SQLengine = connEngine
-        elif dataManifest.directory == None or dataManifest.directory == "": # If dataManifest directly provided but empty connection engine
+        elif dataManifest.SQLengine == None: # If dataManifest directly provided but empty connection engine
             dataManifest.SQLengine = connEngine
+        
+        if dataManifest.SQLengine == None: # If still None, then error
+            raise ValueError('You must provide a connection Engine to SQL through the DataManifest.SQLengine, or though connEngine.')
 
         dataManifest.loadManifest(loadFrom = 'database')
 
-        # Set dataManifest to be called data manifest from SQL 
-        dataManifest.DF = ExtractData(targetData = 'manifest', start = 'all', end = 'all', fromSQL = True) ## CORRECT? IMPORT EXTRACTDATA
-        print('dataManifest.DF:') # TODO: COMPLETE
-        print(dataManifest.DF)
-        
+        # TODO: Use the meta data list to check what datasets are not in database (DataManifest can be used but currently is based off of .csv files)        
     
     ### Here we scrape past intraday stock data
     ### For now, not interested in testing current prices as can test it later by making it past :D
@@ -168,8 +171,7 @@ def DownloadIntraday(tickers: Iterable[str], intervals: Iterable[int], months: I
                         
                         # Converting the dictionary form to DataFrame
                         scrapeDF = pd.DataFrame.from_dict(data, orient='columns')
-                        print(scrapeDF)
-                        
+
                         # This DF contains both meta data and actual data, must split them up first
                         datalabel = f'Time Series ({interval}min)' # To get the header of the actual data
                         
@@ -195,12 +197,12 @@ def DownloadIntraday(tickers: Iterable[str], intervals: Iterable[int], months: I
                         # Save Meta Data with index (and excepting a possible lack of folder)
                         if saveMode.lower() in ['database', 'both']:
                             # Process table (transpose, add month indicator and fix interval value from 'Xmin' to X)
-                            metaSQLDF = DFtoSQLFormat(metaDF, dfType = "meta", dataContext = (month,interval))
+                            metaSQLDF = DFtoSQLFormat(metaDF, dfType = "meta", dataContext = month)
                             # Save into SQL
                             SQLSave(saveDF = metaSQLDF, engine = dataManifest.SQLengine, saveTable = "metaTable", ignore_index = True, echo = False)
                             pass
 
-                        elif saveMode.lower() in ['direct', 'both']:
+                        if saveMode.lower() in ['direct', 'both']:
                             try:
                                 metaDF.to_csv(rf"{savePath}{symbol}/{symbol}_{interval}_{month}_meta.csv",index=True)
                             except OSError: # If no folder to save into, create it
@@ -224,12 +226,14 @@ def DownloadIntraday(tickers: Iterable[str], intervals: Iterable[int], months: I
                         if saveMode.lower() in ['database', 'both']:
                             # Create dummy dataframe with additional interval and month columns to be used by SQLSave 
                             SQLdataDF = dataDF.copy(deep = True) # Deepcopy to avoid creating additional columns on dataDF
-                            SQLdataDF['Ticker'] = symbol
-                            SQLdataDF['Interval'] = interval ## ADD CONVERSION FUNCTION HERE
+                            # Add ticker/interval cols
+                            SQLdataDF = DFtoSQLFormat(SQLdataDF, dfType = "stock", dataContext = (symbol,interval))
                             SQLSave(saveDF = SQLdataDF, engine = dataManifest.SQLengine, saveTable = "marketTable", ignore_index = True, echo = False)
 
-                        elif saveMode.lower() in ['direct', 'both']:
-                            dataDF.to_csv(rf"{savePath}{symbol}/{symbol}_{interval}_{month}.csv",index=False)
+                        # Direct save
+                        if saveMode.lower() in ['direct', 'both']:
+                            # No need to create directory as will already be done if needed for meta.csv
+                            dataDF.to_csv(rf"{savePath}{symbol}/{symbol}_{interval}_{month}.csv",index=False) 
 
                         ### Setting manifest value and saving
                         # Decide to put 1 or 2 in manifest (based on if requested month is the present month) 

@@ -2,16 +2,14 @@
 def main():
     # To initialise here
     print('Initialising ArcaneQuant:') # TODO: GIVE VERSION, ADD GUI AND CHECK IF I NEED TO IMPORT
-    from arcanequant.quantlib.DataManifestManager import DataManifest
-    from arcanequant.quantlib.DataManifestManager import DownloadIntraday # NEED TO MOVE THIS TO DATA MANAGER
-    from arcanequant.quantlib.SQLManager import SetKeysQuery, DropKeysQuery, ExecuteSQL
-    import arcanequant.quantlib.DataManifestManager as dmm
-    import arcanequant.quantlib.SQLManager as sm
-
+    import arcanequant.quantlib as ql
+    print('Importing QuantLib as \'ql\', use this alias for operations.')
     # Importing tools here do not carry over to later classes
 
-    
+
     print("Enter Python (3.12+) code to execute. Type 'quit' to exit.")
+    from arcanequant.fend import backendInterfacer, app # Launch app
+    return # Don't run CLI (for now)
 
     while True:
         user_input = input(">>> ")

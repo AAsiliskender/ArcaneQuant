@@ -7,7 +7,7 @@
 import numpy as np
 from scipy import stats
 import pandas as pd
-import pandas_ta as ta
+#import pandas_ta as ta # TODO: FIX
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
@@ -18,11 +18,11 @@ import statsmodels.api as sm
 
 # Webscrape libs
 from bs4 import BeautifulSoup
-import yfinance as yf
-import tradingview_scraper as tvs
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from tradingview_scraper.symbols.ideas import Ideas
+#import yfinance as yf # TODO: INSTALL THESE LATER
+#import tradingview_scraper as tvs
+#from selenium import webdriver
+#from selenium.webdriver.chrome.options import Options
+#from tradingview_scraper.symbols.ideas import Ideas
 
 # Other libs (system, graphical or time-compute analysis)
 import os

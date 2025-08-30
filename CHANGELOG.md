@@ -1,5 +1,19 @@
 ##### CHANGELOG
 
+## [0.4.0] - 2025-08-30
+- Created code in Jupyter file that checks data units (a ticker, interval, month) in database also exists in direct files; if missing, saves database data into direct form.
+- Created app.py with GUI to allow intuitive use. Currently contains (incomplete functionality):
+    > DataManifestController for loading/saving datamanifests
+    > DataController for downloading data and extracting data
+    > TabManager (to be renamed) for creating new tabs for tables/graphs
+    > TabView (to be renamed) for showing actual data
+- To be added later:
+    > SQLController for SQL based operations (setup, repair etc.)
+    > ViewManager (to be renamed) for editing graph
+    > QuantController (to be renamed) for analytical ops
+    > CLIOperator (to be renamed) for direct CLI usage in-app
+- Created backendInterfacer.py to communicate information between QML-Python
+
 ## [0.3.0] - 2025-08-04
 - Cleaned up some code to output manifest, stock and meta data in one of 3 formats; SQL-acceptable, API-outputted (and ArcaneQuant-compatible), and full-data (also ArcaneQuant-compatible)
 - Added ExtractData functionality to extract meta data from SQL
@@ -50,3 +64,4 @@
 ### Added
 - Initial early release
 - Working pandas/.csv file management
+
