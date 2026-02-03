@@ -1,5 +1,46 @@
 ##### CHANGELOG
 
+## [0.5.0] - 2026-02-03
+- Added DataAnalysis.ipynb as an example of conducting data analysis for trading purposes. Trading is not conducted here but some strategies/information is gleaned from the data. Note currently only a small part of ArcaneQuant library is used for this but this will be expanded later as I gain confidence in practical modelling.
+- Added method repairManifest, repairs manifest by removing duplicate columns and conducting full validation. Other repair actions may be added later.
+- Updated SQLtoDFFormat() function (and therefore the postProcess argument) to consider removing the Interval and Ticker
+columns from ExtractData() dataframe output if each has a unique value (i.e. only one Ticker), separately, rather than removing
+both if only both are unique.
+- Functionally completed following UI elements:
+    > DataManifestController
+    > SQLController
+    > DataController
+- Added UI elements showing:
+    > If currently, directly-loaded and database-loaded DataManifests are synced.
+    > Which DataManifest is linked (to the current manifest being shown in the app).
+    > If a selected unit data identifier (ticker, interval, month-year) exists with the specified load option(s).
+    > Colour theming for button operations:
+        * Basic for normal operations.
+        * Green/white for session initialisation operations.
+        * Red/white for unsafe or potentially unsafe operations.
+        * Yellow/red for highly data-dangerous operations.
+        * Black/white for CLI-style code execution operations.
+    > Popups for normal operation confirmations, and destructive popups for confirming data-dangerous operations (and a separate theme for extremely dangerous operations like SQLWipe).
+- Created new module ModelManager to help manage data models by creating a new dataclass (a first for me) ModelEngine.
+- ModelEngine consists of attributes:
+    > data - Containing the data pool to be used for the model(s).
+    > selection - Containing the name label(s) of the subset to be selected from the data.
+    > ops - Anonymous lambda operations (value) available in the engine instance.
+    > processDict - A dictionary of named 'processes' (key) that reference a tuple (value) of an operation (ops) and its corresponding
+    selection label(s).
+    > pipelineDict - A dictionary of named (key) pipelineDict referencing an iterable (value) of tuples containing the names
+    of operations to be done in succession. The operations must be ordered correctly and the input/output variable count must be correct.
+    > modelsDict - A dictionary containing the name (key) and output (value) of processDict elements after execution.
+- ModelEngine methods are:
+    > inherit_from - Inherits one, some or all of its attributes from the target ModelEngine.
+    > merge - Merges two instances of ModelEngine, prioritising attributes from primary source (a classmethod).
+    > execute_process - Executes a specific item in processDict (i.e. one process) by running the relevant pipeline on data
+    filtered using ModelEngine.selection (can store output into ModelEngine.models).
+    > execute_pipeline - Executes specified pipeline's processes in order, stores output into ModelEngine.models.
+    > execute_all_pipe - Executes all pipelines in pipelineDict.
+    > models - Outputs the models from self.modelsDict in pandas.DataFrame format.
+- Other methods will be added later (relating to saving or loading from long-term storage, or visual settings)
+
 ## [0.4.0] - 2025-08-30
 - Created code in Jupyter file that checks data units (a ticker, interval, month) in database also exists in direct files; if missing, saves database data into direct form.
 - Created app.py with GUI to allow intuitive use. Currently contains (incomplete functionality):
@@ -64,4 +105,6 @@
 ### Added
 - Initial early release
 - Working pandas/.csv file management
+
+
 

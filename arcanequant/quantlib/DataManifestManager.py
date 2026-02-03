@@ -60,13 +60,15 @@ class DataManifest():
     ---
     ___________________________________
     Method List:
-    > loadManifest - Loads manifest from a .json file into the Data Frame in this class
-    > saveManifest - Saves manifest in this class from DataFrame into a .json file 
-    > setValue - Sets (or adds) a given value in the manifest
-    > validateManifest - Checks the files (or lack thereof) indicated by the manifest
-    > reduceManifest - Culls and rows and columns full of zeroes
-    > loadData_fromcsv - Loads actual data (of point indicated in manifest) from .csv file
-    > loadData_fromsql - Loads actual data (of point indicated in manifest) from database
+    > validateManifest - Checks the files (or lack thereof) indicated by the manifest.
+    > connectSQL - Connects a SQL engine to the manifest.
+    > reduceManifest - Culls and rows and columns full of zeroes.
+    > setValue - Sets (or adds) a given value in the manifest.
+    > loadData_fromcsv - Loads actual data (of point indicated in manifest) from .csv file.
+    > loadData_fromsql - Loads actual data (of point indicated in manifest) from database.
+    > saveManifest - Saves manifest in this class from DataFrame into a .json file.
+    > loadManifest - Loads manifest from a .json file into the Data Frame in this class.
+    > repairManifest - Repairs manifest.
     """
         
     def __init__(self):
@@ -80,7 +82,12 @@ class DataManifest():
         print('Data Manifest Initialised') # Also runs during startup
 
     def __str__(self):
-        return f'DataManifest with filename "{self.fileName}" of directory "{self.directory}" and SQL engine {self.SQLengine}.'
+        total = 0
+        for col in self.DF.values:
+            for item in col:
+                if item == 1:
+                    total += 1
+        return f"""DataManifest with filename "{self.fileName}" of directory "{self.directory}" and SQL engine {self.SQLengine}. Total completed files: {2*total}."""
 
     def __repr__(self):
         return f'DataManifest(fileName = {self.fileName}, directory = {self.directory}, SQLengine = {self.SQLengine}). DF dimensions: {self.DF.shape}'
@@ -511,9 +518,40 @@ class DataManifest():
             self.DF.fillna(0, inplace=True)
         
             # Convert all values to int (1 or 0)
-            for column in self.DF.columns:
-                self.DF[column] = self.DF[column].astype(int)
+            self.DF = self.DF.astype(int)
+            #for column in self.DF.columns:
+            #    self.DF[column] = self.DF[column].astype(int)
             return
+        
+    # Method to repair DataManifest
+    def repairManifest(self, echo=True):
+        print("Repairing DataManifest...")
+
+        # Fix for column duplication
+        if echo: print("Checking and fixing duplicate columns")
+        isDupe = self.DF.columns.duplicated() # Marks duplicate cols (except one)
+        for i in range(len(isDupe)):
+            col = isDupe[i]
+            if col:
+                self.DF.columns.values[i] = 'TO_DEL' # Mark columns to delete
+        self.DF.columns = list(self.DF.columns) # Enforce internal update
+
+        self.DF.columns.name = 'Month' # Re-add columns name
+
+        if 'TO_DEL' in self.DF.columns:
+            self.DF.drop(columns=['TO_DEL'], inplace=True)
+        
+        # Setting data
+        if 'float64' in self.DF.dtypes:
+            if echo: print("Non-integer detected in manifest, converting datatype")
+            self.DF = self.DF.astype(int)
+
+        # Validating manifest
+        if echo: print("Validating manifest data")
+        self.validateManifest(fastValidate=False)
+
+        
+
 
 ##################################
 ##################################

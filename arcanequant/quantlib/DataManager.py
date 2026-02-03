@@ -60,7 +60,7 @@ def DownloadIntraday(tickers: Iterable[str], intervals: Iterable[int], months: I
         > 'both' saves data in both formats
     """
     # Guard function against bad save option input (to avoid calling API and not saving)
-    if not saveMode.lower() in ['database', 'direct', 'both']:
+    if saveMode.lower() not in ['database', 'direct', 'both']:
         raise ValueError('You must specify a valid save mode - (SQL) database, direct (to .csv file) or both')
 
     from .DataManifestManager import DataManifest
@@ -275,7 +275,8 @@ def ExtractData(targetData: str, start, end, manifest: DataManifest = DataManife
     - convertDatetime - Boolean indicating to convert any Date/Time columns to a datetime64[ns] format. If False, converts to string.
     - condition - A user-custom callable condition for filtering or selecting subset of data, e.g. lambda functions. The
     condition must take in one input (DataFrame) only. Example: lambda df: df['Ticker'] == 'TEST', or for compound filtering,
-    use lambda df: (df['2. Symbol'] == 'TEXT') & (df['4. Interval'] == f"{15}min")
+    use lambda df: (df['2. Symbol'] == 'TEXT') & (df['4. Interval'] == f"{15}min"). When filtering for multiple values in one column,
+    use lambda df: df['Ticker'].isin(tickers), where ticker is list of tickers (like ['TEST','SYMB'])
     - filters - Custom inputtable keyword-argument (kwarg) variables to act as simple equality filters (i.e. inputting Ticker =
     "TEST" as a kwarg filters the 'Ticker' column for "TEST" datapoints only) 
 

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
+import QtGraphs
 
 ColumnLayout {
     id: centreBox
@@ -63,7 +64,20 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Label {
-                    text: "This is the Home tab"
+                    text: `This is the Home tab.
+Tips on use:
+- Your data is taken from or saved into either FILES ('Direct') or into SQL ('Database')
+- DataManifest Controller is used to start/control sessions.
+- Data Controller is used to download and extract data.
+- SQL Controller is used to manage the SQL Database (use carefully).
+
+Visual guidance:
+- Red light means the relevant system/operation will not function (same as when buttons are disabled).
+- Green means system/operation functional.
+- Yellow indicates a fault with the operation, or it will not work but could with different settings.
+- Red buttons can cause data to be lost, use carefully.
+`
+                    width: parent.width/2
                     anchors.centerIn: parent
                 }
             }
@@ -174,94 +188,94 @@ ColumnLayout {
 
             // Index 2+
             // Used whenever stockdata is added
-            Repeater {
+            Repeater { // Table data
                 id: tabmaker
                 model: tabModel
 
                 delegate: GridLayout {
-                        id: grid_repeat
-                        rows: 2
-                        columns: 2
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        rowSpacing: 0
-                        columnSpacing: 0
+                    id: grid_repeat
+                    rows: 2
+                    columns: 2
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    rowSpacing: 0
+                    columnSpacing: 0
 
-                        Rectangle {         // Spacer for column header
-                            Layout.row: 0; Layout.column: 0
-                            Layout.preferredWidth: vHeader_repeat.width; Layout.preferredHeight: hHeader_repeat.height
-                            color: "transparent"
-                        }
+                    Rectangle {         // Spacer for column header
+                        Layout.row: 0; Layout.column: 0
+                        Layout.preferredWidth: vHeader_repeat.width; Layout.preferredHeight: hHeader_repeat.height
+                        color: "transparent"
+                    }
 
-                        // Shows column indices
-                        HorizontalHeaderView {
-                            id: hHeader_repeat
-                            Layout.row: 0; Layout.column: 1
-                            Layout.fillWidth: true // Using fillWidth here stops overflow (as its implictWidth is limited to layout instead of whatever the columns want to be)
-                            syncView: table_repeat
-                            clip: true
-                            delegate: Rectangle {
-                                implicitHeight: 40
-                                implicitWidth: 70
-                                border.color: "#ff7300"
-                                color: (row % 2 === 0 ? "#32ace4" : "#8738ee")
+                    // Shows column indices
+                    HorizontalHeaderView {
+                        id: hHeader_repeat
+                        Layout.row: 0; Layout.column: 1
+                        Layout.fillWidth: true // Using fillWidth here stops overflow (as its implictWidth is limited to layout instead of whatever the columns want to be)
+                        syncView: table_repeat
+                        clip: true
+                        delegate: Rectangle {
+                            implicitHeight: 40
+                            implicitWidth: 70
+                            border.color: "#ff7300"
+                            color: (row % 2 === 0 ? "#32ace4" : "#8738ee")
 
-                                Text {
-                                    text: model.display
-                                    horizontalAlignment: Text.AlignHCenter
-                                    padding: 4
-                                }
-                            }
-                        }
-
-                        // Shows row indices
-                        VerticalHeaderView {
-                            id: vHeader_repeat
-                            Layout.row: 1
-                            Layout.column: 0
-                            Layout.fillHeight: true // Using fillHeight here stops overflow (as its implictHeight is limited to layout instead of whatever the rows want to be)
-                            syncView: table_repeat
-                            clip: true
-                            delegate: Rectangle {
-                                implicitHeight: 32
-                                implicitWidth: 40
-
-                                border.color: "#0400ff"
-                                color: (row % 2 === 0 ? "#e4d832" : "#e3ff7d")
-
-                                Text {
-                                    text: model.display
-                                    horizontalAlignment: Text.AlignHCenter
-                                    padding: 4
-                                }
-                            }
-                        }
-                            
-                        TableView {
-                            id: table_repeat
-                            clip: true
-                            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
-                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                            boundsBehavior: Flickable.StopAtBounds
-
-                            model: dfModel
-
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-
-                            delegate: Rectangle {
-                                implicitHeight: 32
-                                implicitWidth: 150
-                                border.color: "#ddd"
-                                color: (row % 2 === 0 ? "#d1d1d1" : "#ffffff")
-
-                                Text {
-                                    text: model.display   // works now
-                                    padding: 4
-                                }
+                            Text {
+                                text: model.display
+                                horizontalAlignment: Text.AlignHCenter
+                                padding: 4
                             }
                         }
                     }
+
+                    // Shows row indices
+                    VerticalHeaderView {
+                        id: vHeader_repeat
+                        Layout.row: 1
+                        Layout.column: 0
+                        Layout.fillHeight: true // Using fillHeight here stops overflow (as its implictHeight is limited to layout instead of whatever the rows want to be)
+                        syncView: table_repeat
+                        clip: true
+                        delegate: Rectangle {
+                            implicitHeight: 32
+                            implicitWidth: 40
+
+                            border.color: "#0400ff"
+                            color: (row % 2 === 0 ? "#e4d832" : "#e3ff7d")
+
+                            Text {
+                                text: model.display
+                                horizontalAlignment: Text.AlignHCenter
+                                padding: 4
+                            }
+                        }
+                    }
+                        
+                    TableView {
+                        id: table_repeat
+                        clip: true
+                        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        model: dfModel
+
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        delegate: Rectangle {
+                            implicitHeight: 32
+                            implicitWidth: 150
+                            border.color: "#ddd"
+                            color: (row % 2 === 0 ? "#d1d1d1" : "#ffffff")
+
+                            Text {
+                                text: model.display   // works now
+                                padding: 4
+                            }
+                        }
+                    }
+                }
                 
                 
             }

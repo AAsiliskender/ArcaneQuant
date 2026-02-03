@@ -1,4 +1,4 @@
-# Python cache
+ # Python cache
 __pycache__/
 *.py[cod]
 
@@ -18,7 +18,7 @@ SQLlogin.env
 
 # Data
 data/*
-data/StockHistData/*
+data/StockHistData/**
 
 # EXCEPTION FOR IGNORE
 # When ignoring a folder but exception inside, you must except all folders on the way there (so each folder is searched)
@@ -27,5 +27,6 @@ data/StockHistData/*
 !data/StockHistData/dataManifest.json
 !data/StockHistData/MSFT/
 !data/StockHistData/NVDA/
-!data/StockHistData/MSFT/*.csv
-!data/StockHistData/NVDA/*.csv
+!data/StockHistData/MSFT/MSFT*2022-01*.csv
+!data/StockHistData/NVDA/NVDA*2022-01*.csv
+# Changed this to make it only not ignore a single month (with all intervals) (as sample data)

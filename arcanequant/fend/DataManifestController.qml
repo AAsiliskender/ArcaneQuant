@@ -18,6 +18,23 @@ Item {
     property string itemColour: "#e0e0e0"
     property string itemBorderColour: "#dd0000"
     property bool sqlConnected: false
+    property bool fileLinked: false
+
+    property alias sqlSourceLabel: sqlLabel.text
+    property alias fileSourceLabel: dirLabel.text
+    property bool sqlLoaded: false
+    property bool fileLoaded: false
+
+    function canSaveLoad(option) {
+        if (option == 'Direct') {
+            return fileLinked
+        } else if (option == 'Database') {
+            return sqlConnected
+        } else if (option == 'Both') {
+            return fileLinked && sqlConnected
+        }
+        return false // Fallback in case wrong input
+    }
 
     Rectangle {
         id: box
@@ -37,7 +54,7 @@ Item {
             Text {
                 id: title
                 anchors.verticalCenter: parent.top; anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("DataManifest Settings")
+                text: qsTr("DataManifest Controller")
                 font.pixelSize: 18
                 font.weight: Font.DemiBold
                 z: 1
@@ -79,20 +96,72 @@ Item {
             }
         }
         Row {
-            anchors.centerIn: parent
-            anchors.bottomMargin: 10
+            id: sqlSourceRow
+            anchors.bottom: fileSourceRow.top; anchors.left: parent.left
+            anchors.bottomMargin: 7
+            anchors.leftMargin: 15
             spacing: 10
 
+            // SQL Loaded Indicator
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: width
+                radius: width/2
+                color: if (dmController.sqlConnected) {
+                    "green"
+                } else {
+                    "red"
+                }
+            }
+            // Text showing connected SQL engine/source
             Text {
-                id: sourceLabel
-                text: qsTr("No Source: ")
+                id: sqlSourceLabel
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("SQL Engine: ")
+                font.pixelSize: 12
+            }
+            Text {
+                id: sqlLabel
+                anchors.verticalCenter: parent.verticalCenter
+                text: loader.itemText
+                font.pixelSize: 12
+                width: box.width*0.65 //RelativeSize
+                elide: Text.ElideLeft
+            }
+        }
+        Row {
+            id: fileSourceRow
+            anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left
+            anchors.bottomMargin: 8
+            anchors.leftMargin: 15
+            spacing: 10
+
+            // Manifest File Linked Indicator
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: width
+                radius: width/2
+                color: if (dmController.fileLinked) {
+                    "green"
+                } else {
+                    "red"
+                }
+            }
+            // Text showing linked file directory/source
+            Text {
+                id: fileSourceLabel
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("File Source: ")
                 font.pixelSize: 12
             }
             Text {
                 id: dirLabel
+                anchors.verticalCenter: parent.verticalCenter
                 text: loader.itemText
                 font.pixelSize: 12
-                width: box.width*0.75 //RelativeSize
+                width: box.width*0.65 //RelativeSize
                 elide: Text.ElideLeft
             }
         }
@@ -102,22 +171,34 @@ Item {
             anchors.topMargin: 5; anchors.bottomMargin: 5
             spacing: parent.width * 0.2-70 //RelativeSize
 
-            Button {
-                text: qsTr("Connect to SQL")
-                enabled: backend.hasDataManifest
-                onClicked: {
-                    sqlLoadDialog.open()
+            
+            Item {
+                height: savebutton.height; width: savebutton.width
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr(`Current Link: 
+` + backend.currentAssignment)
                 }
-                width: Math.max(box.width * 0.15, 120) //RelativeSize
-                height: Math.max(box.height * 0.15, 30) //RelativeSize //TODO: ADD OPERATION
-                leftPadding: width*0.08 //RelativeSize
-                rightPadding: width*0.08 //RelativeSize
+                
             }
 
             Button {
-                text: qsTr("Validate DataManifest")
-                enabled: backend.hasDataManifest
+                text: qsTr("Validate")
+                enabled: backend.hasDataManifest && fileLinked // Only if file linked as that is the only validation option right now
                 onClicked: dirLabel.text = qsTr("Clicked!")
+                // Tooltip settings
+                ToolTip {
+                    parent: parent
+                    visible: parent.hovered
+                    delay: 1000
+                    dim: true
+                    text: qsTr("Validates by checking if data indicated to exist in DataManifest exists (and vice versa).")
+
+                    x: (parent.width-width)/2
+                    y: parent.height
+                    width: Math.min(contentWidth + 2*horizontalPadding, parent.width*2)
+                }
+                
                 width: Math.max(box.width * 0.15, 120) //RelativeSize
                 height: Math.max(box.height * 0.15, 30) //RelativeSize //TODO: ADD OPERATION
                 leftPadding: width*0.08 //RelativeSize
@@ -125,18 +206,42 @@ Item {
             }
 
             Button {
-                text: qsTr("Delete DataManifest")
+                text: qsTr("Delete")
                 enabled: backend.hasDataManifest
                 onClicked: {
                     backend._delManifest()
-                    sourceLabel.text = qsTr("Deleted: ")
-                    dirLabel.text = qsTr("No DataManifest. Load DataManifest to begin.")
+                    loader.sqlConnected = false
+                    loader.sqlLoaded = false
+                    loader.fileLinked = false
+                    loader.fileLoaded = false
+                    sqlSourceLabel.text = qsTr("SQL Engine: ")
+                    sqlLabel.text = qsTr("Deleted. Load DataManifest to begin.")
+                    fileSourceLabel.text = qsTr("File Source: ")
+                    dirLabel.text = qsTr("Deleted. Load DataManifest to begin.")
                 }
+                // Tooltip settings
+                ToolTip {
+                    parent: parent
+                    visible: parent.hovered
+                    delay: 600
+                    dim: true
+                    text: qsTr("Closes session, deleting existing manifest. Any unsaved changes are lost.")
+
+                    x: (parent.width-width)/2
+                    y: parent.height
+                    width: Math.min(contentWidth + 2*horizontalPadding, parent.width*2)
+                }
+
+                Material.background: Material.Red
+                Material.foreground: "white"
+                Material.elevation: 5
+                
                 width: Math.max(box.width * 0.15, 120) //RelativeSize
                 height: Math.max(box.height * 0.15, 30) //RelativeSize //TODO: ADD OPERATION
                 leftPadding: width*0.08 //RelativeSize
                 rightPadding: width*0.08 //RelativeSize
             }
+            
         }
         Row {
             id: saveRow
@@ -149,9 +254,31 @@ Item {
                 text: qsTr("New DataManifest")
                 onClicked: {
                     backend._newManifest()
-                    sourceLabel.text = qsTr("Initialised: ")
-                    dirLabel.text = qsTr("New DataManifest")
+                    loader.sqlConnected = false
+                    loader.sqlLoaded = false
+                    loader.fileLinked = false
+                    loader.fileLoaded = false
+                    sqlSourceLabel.text = qsTr("SQL Engine: ")
+                    sqlLabel.text = qsTr("DataManifest Initialised")
+                    fileSourceLabel.text = qsTr("File Source: ")
+                    dirLabel.text = qsTr("DataManifest Initialised")
                 }
+                // Tooltip settings
+                ToolTip {
+                    parent: parent
+                    visible: parent.hovered
+                    delay: 1000
+                    dim: true
+                    text: qsTr("Start a new session by making a new DataManifest. Existing unsaved data is lost.")
+
+                    x: (parent.width-width)/2
+                    y: parent.height
+                    width: Math.min(contentWidth + 2*horizontalPadding, parent.width*2)
+                }
+                
+                Material.background: Material.Green
+                Material.foreground: "white"
+                
                 width: Math.max(box.width * 0.15, 120) //RelativeSize
                 height: Math.max(box.height * 0.15, 30) //RelativeSize // TODO: ADD COLOUR
                 leftPadding: width*0.08 //RelativeSize
@@ -161,7 +288,8 @@ Item {
             Button {
                 id: savebutton
                 text: qsTr("Save")
-                enabled: backend.hasDataManifest
+                // If connection to file/engine and relevant option selected (if both, need both connection), enabled
+                enabled: (backend.hasDataManifest) && loader.canSaveLoad(saveops.currentValue)
                 property string saveTo: 'database'
                 onClicked: {
                     if (saveops.currentValue == 'Direct') { // Save into file only
@@ -190,10 +318,11 @@ Item {
                 onClicked: {
                     if (loadops.currentValue == 'Direct') { // Load from file
                         loadFrom = 'direct'
-                        
                         manifestLoadDialog.open() // Load manifest on accept in dialog
                     } else { // Database load
-                        backend._loadManifest(loadFrom, "", "") //CHECK OUTPUT
+                        loadFrom = 'database'
+                        backend._loadManifest(loadFrom, "", "")
+                        loader.sqlLoaded = true
                     }
                     
                     
@@ -208,38 +337,7 @@ Item {
     }
 
     // FileDialogs for loading/saving
-    // FileDialog for SQL file load
-    FileDialog {
-        id: sqlLoadDialog
-        currentFolder: backend.current_url_env
-        nameFilters: ["Env files (*.env)", "All supported types (*.env)", "All files (*)"]
-        onAccepted: {
-            backend.current_url_env = sqlLoadDialog.currentFolder
-
-            // Separate folder and file (name only) (let is local scope)
-            if (sqlLoadDialog.selectedFile) { // Avoid undefined errors
-                let filePath = sqlLoadDialog.selectedFile.toString()
-                
-                // /[]/ is the JS regex handle notation, handles both / and \ and first pops out last element (file)
-                let fileName = filePath.split(/[/\\]/).pop().split('.')
-                // Remove extension
-                let fileExt  = fileName.pop()
-                // Take out fileName from array of len 1
-                fileName = fileName.pop()
-                
-                // Run _connectSQL //
-                backend._connectSQL(fileName,sqlLoadDialog.selectedFolder)
-                loader.sqlConnected = true
-                sourceLabel.text = qsTr("Database: ")
-                dirLabel.text = qsTr(backend.strEngine)
-
-            } else {
-                console.log("No file selected")
-            }
-        }
-    }
-
-    // FileDialog for DataManifest load
+    // FileDialog for DataManifest load (direct)
     FileDialog {
         id: manifestLoadDialog
         currentFolder: backend.current_url_json
@@ -258,10 +356,12 @@ Item {
             // Take out fileName from array of len 1
             fileName = fileName.pop()
 
-            sourceLabel.text = qsTr("File: ")
+            fileSourceLabel.text = qsTr("File Source: ")
             dirLabel.text = qsTr(manifestLoadDialog.selectedFile.toString())
             
             backend._loadManifest(loadbutton.loadFrom, folderPath, fileName)
+            loader.fileLinked = true
+            loader.fileLoaded = true
         }
     }
 
@@ -285,7 +385,6 @@ Item {
             // Take out fileName from array of len 1
             fileName = fileName.pop()
 
-            sourceLabel.text = qsTr("File: ")
             dirLabel.text = qsTr(manifestSaveDialog.selectedFile.toString())
             
             //backend._loadManifest(loadbutton.loadFrom, folderPath, fileName)
