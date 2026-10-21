@@ -7,8 +7,8 @@ def main():
     # Importing tools here do not carry over to later classes
 
 
-    print("Enter Python (3.12+) code to execute. Type 'quit' to exit.")
-    from arcanequant.fend import backendInterfacer, app # Launch app
+    print("Enter Python (3.13+) code to execute. Type 'quit' to exit.")
+    from arcanequant.fend import backend_interfacer, app # Launch app
     return # Don't run CLI (for now)
 
     while True:

@@ -1,21 +1,43 @@
-from PySide6.QtCore import QObject, Slot, QUrl, Property, Signal, QAbstractTableModel, Qt, QAbstractListModel, QModelIndex, QStringListModel
 from pathlib import Path
+
+import pandas as pd
+from PySide6.QtCore import (
+    Property,
+    QAbstractListModel,
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    QStringListModel,
+    Qt,
+    QUrl,
+    Signal,
+    Slot,
+)
 
 # Import dependent stuff
 from sqlalchemy import engine
-import pandas as pd
+
+from ..quantlib.data_manager import DownloadIntraday, ExtractData
 
 # Import whole classes
-from ..quantlib.DataManifestManager import DataManifest
-from ..quantlib.DataManager import DownloadIntraday, ExtractData
+from ..quantlib.data_manifest_manager import DataManifest
+
 # Import functions in classes
-from ..quantlib.SQLManager import SQLSetup, SQLEstablish, SQLRepair, SQLSave, SQLSync, SQLClear, SQLNuke, ExecuteSQL
+from ..quantlib.sql_manager import (
+    ExecuteSQL,
+    SQLClear,
+    SQLEstablish,
+    SQLNuke,
+    SQLRepair,
+    SQLSave,
+    SQLSetup,
+    SQLSync,
+)
 
 #import utils # Import function to save outputdata
 # TODO: CREATE A FUNCTION THAT TAKES OUTPUT FROM APP AND SAVES
 
-### Backend is used by QML to interact with pure python code (mostly using wrappers)
-# 
+### Backend is used by QML to interact with pure python code (mostly using wrappers/decorators)
 class Backend(QObject):
     def __init__(self):
         super().__init__()
@@ -24,24 +46,32 @@ class Backend(QObject):
         self.data_manifest = None   # This holds DataManifest instance (and its path/engine as needed)
         self.engine = None          # This holds SQLAlchemy Engine (if given)
 
-        self.base_path = Path(".").resolve() # Holds base path
+        self.base_path = Path.cwd() # Holds base path
         self.base_url = QUrl.fromLocalFile(str(self.base_path)) # Holds base path (in url form)
 
         self.curr_path_env = self.base_path # Initialise from base
         self.curr_path_json = self.base_path # Initialise from base
 
+        self.assignment = "Unassigned"
+        self.dmdf_direct = None # Directly obtained data manifest
+        self.dmdf_sql = None # Data manifest from database (to compare for sync state)
+
         # Models
         self.tabModel = TabListModel() # Model containing all newly-generated dataframes 
-        self.dfModel = DataFrameModel(pd.DataFrame()) # DataManifest Model
+        self.dfModel = DataFrameModel(pd.DataFrame()) # DataManifest Model (is either from direct file or database)
         
         # Updaters setup (no '()' on functions)
         self.dataManifestChange.connect(self.updateAllParam)
 
         # Data-related objects
         self.allTickers_list = ["None"]
-        self.allMonths_list = ["None"]
-        self.allYears_list = ["None"]
+        self.allMonths_list = ["--"]
+        self.allYears_list = ["----"]
         self.dataManifestChange.emit()
+
+        self.targetTickers = []
+        self.targetIntervals = []
+        self.targetDataChanged.emit()
 
         
 
@@ -51,6 +81,7 @@ class Backend(QObject):
     dataManifestChange = Signal()
     engineChange = Signal()
     modelsChanged = Signal()
+    targetDataChanged = Signal()
     
 
     ### Methods for front-end state changes (i.e. value getters/setters) (text/plots etc.)
@@ -93,32 +124,33 @@ class Backend(QObject):
 
     def _get_strengine(self):
         return str(self.engine)
-
-    # Checks if input exists in data manifest
-    @Slot(str, int, str, result=bool)
-    def _check_DataDM(self, ticker, interval, yearMonth) -> bool:
-        """Returns boolean if data requested exists"""
-        if self.data_manifest is not None:
-            try:
-                fileVal = self.data_manifest.DF.loc[((ticker,interval),yearMonth)]
-                if fileVal == 1 or fileVal == 2:
-                    return True
-            except KeyError:
-                pass
-            except Exception as e:
-                # log unexpected errors
-                print(f"Unexpected error in _check_DataDM: {e}")
-
-        return False
+    
+    def _set_assignment(self, target: str): # Assignment is only set at load ('both' is redundant for now)
+        if target.lower() in ['direct', 'both']:
+            self.assignment = 'Direct'
+            self.dmdf_direct = self.data_manifest.DF.copy()
+        if target.lower() in ['database', 'both']:
+            self.assignment = 'Database'
+            self.dmdf_sql = self.data_manifest.DF.copy()
+    
+    def _get_assignment(self) -> bool:
+        return self.assignment
+    
+    def _get_syncState(self) -> bool:
+        if self.assignment.lower() == "unassigned":
+            return False
+        elif self.assignment.lower() == 'direct':
+            return self.data_manifest.DF.equals(self.dmdf_sql)
+        elif self.assignment.lower() == 'database':
+            return self.data_manifest.DF.equals(self.dmdf_direct)
         
-        
-
-    ## NOTE: NEED TO MAKE SLOT ACCEPT LIST, ENGINE, DATAMANIFEST ETC.
     
     ### Slots for connecting variables in infrastructure to the back-end
     @Slot()
     def _newManifest(self):
         self.data_manifest = DataManifest()
+        self.dmdf_direct = pd.DataFrame()
+        self.dmdf_sql = pd.DataFrame()
         self.dfModel.setDataFrame(self.data_manifest.DF)
         self.updateAllParam()
         self.dataManifestChange.emit()
@@ -127,11 +159,41 @@ class Backend(QObject):
     @Slot()
     def _delManifest(self): # Also deletes engine
         self.data_manifest = None
+        self.dmdf_direct = None
+        self.dmdf_sql = None
         self.engine = None
         self.dfModel.setDataFrame(pd.DataFrame())
         self.dataManifestChange.emit()
         return
+    
+    @Slot(int)
+    def _addInterval(self, interval):
+        self.targetIntervals.append(interval)
+        self.targetIntervals = list(set(self.targetIntervals)) # List/set to remove duplicates
+        self.targetIntervals.sort()
+        self.targetDataChanged.emit()
+        return
+        
+    @Slot(str)
+    def _addTicker(self, ticker):
+        self.targetTickers.append(ticker.upper())
+        self.targetTickers = list(set(self.targetTickers)) # List/set to remove duplicates
+        self.targetTickers.sort()
+        self.targetDataChanged.emit()
+        return
 
+    @Slot(int)
+    def _rmInterval(self, interval):
+        self.targetIntervals.remove(interval)
+        self.targetDataChanged.emit()
+        return
+        
+    @Slot(str)
+    def _rmTicker(self, ticker):
+        self.targetTickers.remove(ticker.upper())
+        self.targetDataChanged.emit()
+        return
+    
     ### Slots for QML calling python methods and functions (using _ as methods are QML-Python connectors)
     #=== DataManifestManager Functions ===#
     @Slot(bool)
@@ -195,12 +257,19 @@ class Backend(QObject):
     @Slot(str, str)
     def _saveManifest(self, saveTo, savePath):
         if self.data_manifest is not None:
-            return self.data_manifest.saveManifest(saveTo = saveTo, savePath = savePath, echo = True)
+            self.data_manifest.saveManifest(saveTo = saveTo, savePath = savePath, echo = True)
+            # Setting DF copy to check for sync
+            if saveTo.lower() in ["json", "both"]:
+                self._set_assignment('direct') 
+            if saveTo.lower() in ["sql", "both"]:
+                self._set_assignment('database')
+            return
         
     @Slot(str, str, str)
     def _loadManifest(self, loadFrom, path, fileName):
         if self.data_manifest is not None:
             self.data_manifest.loadManifest(loadFrom = loadFrom, path = path, fileName = fileName, echo = True)
+            self._set_assignment(loadFrom) # Setting DF copy to check for sync
             self.dfModel.setDataFrame(self.data_manifest.DF)
             self.updateAllParam()
             self.dataManifestChange.emit()
@@ -230,7 +299,9 @@ class Backend(QObject):
     @Slot(bool)
     def _SQLSync(self, fastSync):
         if self.data_manifest is not None and self.data_manifest.SQLengine is not None:
-            return SQLSync(dataManifest = self.data_manifest, fastSync = fastSync, echo = False)
+            SQLSync(dataManifest = self.data_manifest, fastSync = fastSync, echo = True)
+            self._loadManifest('database', "", "")
+            self.dataManifestChange.emit()
 
     @Slot()
     def _SQLClear(self):
@@ -248,13 +319,14 @@ class Backend(QObject):
             return ExecuteSQL(query, self.data_manifest.SQLengine, fetch = fetch, transact = transact)
 
     #=== DataManager Functions ===#
-    #@Slot(list,list,list, str, str, str, engine) #QVariant use [] to read as list?c
-    #def _DownloadIntraday(self, tickers, intervals, months, APIkey, saveMode = 'direct'):
-    #    if self.data_manifest != None:
-    #        if saveMode == 'direct' or (saveMode in ['database', 'both'] and self.data_manifest.SQLengine != None):
-    #            return DownloadIntraday(tickers, intervals, months, APIkey = APIkey, saveMode = saveMode, dataManifest = self.data_manifest, savePath = self.data_manifest.directory, connEngine = self.data_manifest.SQLengine, verbose = False)
-    # TODO: ADD IN EXTRACT DATA AFTER CLEANING UP
-    # SET CORRECT TYPES
+    @Slot(str, str, bool)
+    def _ExtractData(self, start, end, fromSQL):
+        if self.data_manifest is not None and len(self.targetTickers) != 0 and len(self.targetIntervals) != 0:
+            extract_df = ExtractData('marketData', start, end, self.data_manifest, postProcess = True, fromSQL = fromSQL , convertDatetime = False,
+                        condition = lambda df: (df['Ticker'].isin(self.targetTickers)) & (df['Interval'].isin(self.targetIntervals)) )
+            self.tabModel.addTab(f"Data Extract ({start} -- {end}) ({len(self.targetTickers)} tickers) ({len(self.targetIntervals)} intervals)", extract_df)
+            self.modelsChanged.emit()
+            return
 
     ##########################
     ### === Properties === ###
@@ -262,10 +334,6 @@ class Backend(QObject):
     @Property(bool, notify=dataManifestChange) # Allow QML to check if manifest exists
     def hasDataManifest(self):
         return self.data_manifest is not None
-    
-    #@Property(bool, notify=dataManifestChange) # Allow QML to check if SQLengine exists
-    #def hasSQLEngine(self):
-    #    return self.data_manifest is not None and self.data_manifest.SQLengine is not None
     
     # Getting months/tickers available in datamanifest (update first)
     @Property("QStringList", notify=dataManifestChange)
@@ -294,13 +362,29 @@ class Backend(QObject):
             return self.allYears_list
         else:
             return ["----"]
-    
+        
+    @Property("QVariantList", notify=targetDataChanged)
+    def tgtIntervals(self):
+        if self.targetIntervals == []:
+            return ["None"]
+        else:
+            return self.targetIntervals
+        
+    @Property("QStringList", notify=targetDataChanged)
+    def tgtTickers(self):
+        if self.targetTickers == []:
+            return ["None"]
+        else:
+            return self.targetTickers
+
     ### Creating simpler properties for QML to read (for getting/setting variables)
     current_path_env = Property(str, fget = _get_path_env, fset = _set_path_env, notify = envPathChange)
     current_url_env = Property(QUrl, fget = _get_url_env, fset = _set_url_env, notify = envPathChange)
     current_path_json = Property(str, fget = _get_path_json, fset = _set_path_json, notify = jsonPathChange)
     current_url_json = Property(QUrl, fget = _get_url_json, fset = _set_url_json, notify = jsonPathChange)
     strEngine = Property(str, fget = _get_strengine, notify = engineChange)
+    currentAssignment = Property(str, fget = _get_assignment, notify = dataManifestChange)
+    isSynced = Property(bool, fget = _get_syncState, notify = dataManifestChange) # Allow QML to check if both sources of DataManifest is synced
 
     ########################
     ### === Updaters === ###
@@ -322,6 +406,23 @@ class Backend(QObject):
                 self.allMonths_list.sort()
                 self.allYears_list.sort()
 
+    # Checks if input exists in data manifest
+    @Slot(str, int, str, result=bool)
+    def _check_DataDM(self, ticker, interval, yearMonth) -> bool:
+        """Returns boolean if data requested exists"""
+        if self.data_manifest is not None:
+            try:
+                fileVal = self.data_manifest.DF.loc[((ticker,interval),yearMonth)]
+                if fileVal == 1 or fileVal == 2:
+                    return True
+            except KeyError:
+                pass
+            except Exception as e:
+                # log unexpected errors
+                print(f"Unexpected error in _check_DataDM: {e}")
+
+        return False
+    
 
 
 #############################################

@@ -1,7 +1,10 @@
+from collections.abc import Iterable
+
 import pandas as pd
 import sqlalchemy
-from typing import Iterable
-from .DataManifestManager import DataManifest
+
+from .data_manifest_manager import DataManifest
+
 
 class SQLManager():
     """Placeholder class for package-level structure or future use."""
@@ -12,6 +15,7 @@ class SQLManager():
 # - SQLSetup - Sets up SQL to be used by DataManifest
 # - SQLEstablish - Establishes the database by creating necessary tables/columns
 # - SQLRepair - Repairs SQL system by remaking all tables and keys, can even resync data
+# - SQLSave - Saves provided dataset into an SQL table (in an upsert - update-insert - format)
 # - SQLSync - Syncs all data in storage to DataManifest
 # - SQLClear - Clears all row data in SQL (excluding precomputed tables like date/time)
 # - SQLNuke - WIPES ALL DATA, keys, tables in the database (dangerous for only users who store only in SQL database!)
@@ -24,7 +28,7 @@ class SQLManager():
 def SQLSetup(connEngine: sqlalchemy.engine, new = True):
     """
     Sets up SQL to be used by DataManifest. Establishes the set of tables with SQLEstablish,
-    then sets all the necessary keys, and creates the view to connect .csv and SQL storage forms.
+    then sets all the necessary keys, and creates the view to connect .csv and SQL storage formats.
     Input:
     - connEngine - engine used to connect to SQL
 
@@ -166,7 +170,7 @@ def SQLEstablish(engine: sqlalchemy.engine):
     wallstring = ""
 
     # DateTable
-    wallstring += f'''
+    wallstring += '''
                     DROP TABLE IF EXISTS "dateTable" CASCADE;
     
                     CREATE TABLE "dateTable" (
@@ -187,7 +191,7 @@ def SQLEstablish(engine: sqlalchemy.engine):
                     '''
 
     # TimeTable
-    wallstring += f"""
+    wallstring += """
                     DROP TABLE IF EXISTS \"timeTable\" CASCADE;
     
                     CREATE TABLE \"timeTable\" (
@@ -305,6 +309,7 @@ def SQLRepair(dataManifest: DataManifest = None, connEngine: sqlalchemy.engine =
     - dataManifest - DataManifest type, to connect to database (dataManifest should have an existing SQLengine attribute)
     and to re-sync to database (if the optional directory attribute exists).
     - connEngine - Connection to SQL database to repair
+    - deepRepair - Boolean indicating if the database is to be torn down completely and rebuilt (destroys all existing data/tables)
     - dataRepair - Boolean indicating if the data also needs to be repaired (by deleting the SQL dataset and re-syncing
     from the .csv dataset)
     - echo - Echo output/actions from function
@@ -350,7 +355,7 @@ def SQLRepair(dataManifest: DataManifest = None, connEngine: sqlalchemy.engine =
 
         print('Primary repair complete.')
         # At the end, if data repair desired, sync SQL with .csv files (if dataManifest has a directory provided (i.e. a file storage location))
-        if dataRepair and (dataManifest.directory != "" or dataManifest.directory != None):
+        if dataRepair and (dataManifest.directory != "" or dataManifest.directory is not None):
             print('Repairing SQL data using directly stored data: {mode} sync mode.'.format(mode = "Full" if deepRepair else "Fast"))
             SQLSync(dataManifest, not deepRepair, echo)
             print('Data repair complete.')
@@ -510,6 +515,7 @@ def SQLSync(dataManifest: DataManifest, fastSync = False, echo = False):
     - echo - Echo output/actions from function
 
     Note:
+    - dataManifest requires both a linked directory and SQL engine to function
     - fastSync uses fastValidate on validating manifest, and saves the .csv data (in relational form) to the
     SQL database. Not using fastSync conducts a full validation, and also deletes data from SQL before saving
     (to avoid potential clashes and errors).
@@ -517,16 +523,23 @@ def SQLSync(dataManifest: DataManifest, fastSync = False, echo = False):
     print('Syncing SQL with all existing data in storage...')
     
     if echo: print('Verifying existence of files indicated to exist in DataManifest')
+    # If fast sync, get manifest data from SQL (you will skip data indicated to exist in SQL already)
+    sqlDataManifest_DF = None
+    if fastSync:        
+        dataManifest.loadManifest('database')
+        sqlDataManifest_DF = dataManifest.DF.copy()
+
+    # Since validate uses directory files to check, the DF must be sourced from .json (i.e. loadManifest before
+    # validating, unless sqlvalidate form added)
+    dataManifest.loadManifest('direct')
     dataManifest.validateManifest(fastValidate = fastSync, echo = echo)
+
+    
 
     # If not fast sync, delete all SQL data first before reloading
     if not fastSync:
         if echo: print('Clearing all data before reload')
-        SQLClear(dataManifest.SQLengine, echo)
-
-    if echo: print('Syncing data manifest into SQL database')
-    # No need to preprocess DataManifest before saving to SQL
-    SQLSave(dataManifest.DF, dataManifest.SQLengine, 'manifestTable', echo = echo)
+        SQLClear(dataManifest.SQLengine, echo)    
     
     if echo: print('Loading each market and meta data file into SQL database')
     # Sync market table based on dataManifest showing if data exists or not
@@ -548,8 +561,17 @@ def SQLSync(dataManifest: DataManifest, fastSync = False, echo = False):
                 # 2 - File exists but incomplete (as file covers current time or not updated after month ended)
 
                 datapointValue = dataManifest.DF.loc[((ticker,interval),month)]
-                # If file exists, save into SQL
-                if datapointValue == 1 or datapointValue == 2:
+                sqldpVal = 0
+                try:
+                    sqldpVal = sqlDataManifest_DF.loc[((ticker,interval),month)]
+                except KeyError:
+                    # If month column or ticker/interval row doesn't exist (automatically skip check)
+                    sqldpVal = 0
+
+
+                # If file exists, save into SQL (also if fastSync, if data does not exist in database)
+                # Check equality to avoid fastSync when value in sql is 1 
+                if (datapointValue in [1,2]) and not (fastSync and sqldpVal == 1):
                     # Load actual and meta data files
                     fileRead, metaFileRead = dataManifest.loadData_fromcsv(ticker, interval, month, meta = True, echo = echo)
 
@@ -560,6 +582,12 @@ def SQLSync(dataManifest: DataManifest, fastSync = False, echo = False):
                     # Add month to metaFileRead before saving to SQL
                     metaFileRead = DFtoSQLFormat(metaFileRead, 'meta', dataContext=month)
                     SQLSave(metaFileRead, dataManifest.SQLengine, 'metaTable', echo = echo)
+
+    # Sync DataManifest (.DF) after (as need it to skip existing data in fastSync)
+    if echo: print('Syncing data manifest into SQL database')
+    # No need to preprocess DataManifest before saving to SQL
+    SQLSave(dataManifest.DF, dataManifest.SQLengine, 'manifestTable', echo = echo)
+
     return
 
 # Clear all row data in SQL (excluding precomputed tables like date/time)
@@ -1167,9 +1195,15 @@ def SQLtoDFFormat(dataFrame: pd.DataFrame, dfType: str, convertDatetime = False,
         tickerUniques = list(dataFrame['Ticker'].unique())
         intervalUniques = list(dataFrame['Interval'].unique())
 
+        # If not more than 1 unique type, drop Ticker and/or Interval columns
+        if len(tickerUniques) == 1:
+            dataFrame.drop(columns=['Ticker'], inplace = True)
+        if len(intervalUniques) == 1:
+            dataFrame.drop(columns=['Interval'], inplace = True)
+
         # If not more than 1 on both, drop Ticker/Interval columns
-        if len(tickerUniques) == 1 and len(intervalUniques) == 1:
-            dataFrame.drop(columns=['Ticker', 'Interval'], inplace = True)
+        #if len(tickerUniques) == 1 and len(intervalUniques) == 1:
+        #    dataFrame.drop(columns=['Ticker', 'Interval'], inplace = True)
 
         # If convertDatetime, change to datetime (no actual change), else convert to string.
         if convertDatetime:

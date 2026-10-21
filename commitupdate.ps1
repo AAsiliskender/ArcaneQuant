@@ -51,7 +51,9 @@ git commit --allow-empty-message -F NUL
 
 # 7. Interactively squash the version bump + changelog into the main commit
 Read-Host "Rebasing: Change second and third commits to squash, then save and exit (:wq!). Press Enter to continue..."
-git rebase -i HEAD~3  # If you have 3 commits total (feature + bump + changelog)
+git reset --soft HEAD~3
+git commit -S -m $msg
+git tag -s "v$vers" -m "Version $vers"
 
 # In the editor:
 # Change the 2nd and 3rd "pick" to "squash"
