@@ -1,26 +1,27 @@
+################################################################
+###################### SQL EXECUTION TEST ######################
+################################################################
+
 # Integration Testing of SQLExecute function with database (direct query) and pandas (read_sql_query function)
 # Tests if a generic input provided, results in the expected changes as per input.
 
 # Packages
-import pytest
-import pandas as pd
 from datetime import time as dt_time
-from tabulate import tabulate
+
+import pandas as pd
 import psycopg2
+import pytest
 import sqlalchemy
-from sqlalchemy import create_engine, Engine, text
 import sqlalchemy.exc as sqlexc
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy import types as sqltype
+from tabulate import tabulate
 
 # My packages
-from arcanequant import DataManifest
-from arcanequant import ExecuteSQL, SetKeysQuery, DropKeysQuery
+from arcanequant import DataManifest, DropKeysQuery, ExecuteSQL, SetKeysQuery
 
 # need sqlalchemy (and docker imports, after learning to set up docker)
 
-################################################################
-###################### SQL EXECUTION TEST ######################
-################################################################
 # Test by:
 # Creating a defined table, and reading table output
 # The result is tested twice, once by using SQLAlchemy connect_engine provided connection to
@@ -80,7 +81,6 @@ def test_ExecuteSQL(testFrom: str, queryinput: str, expected, setup_SQLtestengin
         if testFrom == 'Pandas':
             result = pd.read_sql_query("SELECT * FROM \"testTable1\";", conn)
             assert result.values.tolist() == expected
-            
         
         elif testFrom == 'Direct':
             extract = conn.execute(text("SELECT * FROM \"testTable1\";"))
@@ -94,7 +94,7 @@ def test_ExecuteSQL(testFrom: str, queryinput: str, expected, setup_SQLtestengin
 #########################
 
 ##################### FIXTURE FUNCTION(S) ######################
-@pytest.fixture(scope = 'function') 
+@pytest.fixture(scope = 'function')
 def setup_SQLtestengine() -> sqlalchemy.engine:
     # Setup
     setupManifest = DataManifest()

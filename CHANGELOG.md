@@ -1,5 +1,36 @@
 ##### CHANGELOG
 
+## [0.6.0] - 2026-10-22
+- Refactored Python file names to match PEP 8 convention.
+- Completely refactored ModelEngine:
+    > Now has associated Classes in new files operation.py and resolution.py that simplify works.
+    > ModelEngine.assets takes data inputted or calculated, ModelEngine.aliases takes References (new class), ModelEngine.functions take Callables (or RegisteredFunctions, new class), ModelEngine.processes takes Processes (new class), and ModelEngine.pipelines may take (not completed yet) Pipeline classes.
+    > Reworked getter and setter methods; forced setting of a variable to a specific attribute, or setting based on type (i.e. Callables go to ModelEngine.functions). New getter methods; get a function from a given name in ModelEngine.functions, or the RegisteredFunction (new Class) from a given name in ModelEngine.functions
+    > New methods to execute add and remove a Process from the ModelEngine, methods to 'standardise' (explained later) Processes, and a new way to execute a Process (calls the .execute() in the Process itself).
+- New Reference Class; a pointer class that seeks through ModelEngine's attributes/variables to get a variable. Allows for lazy execution and consistent referencing of a dataset. Also allows for key-based pointers to allow switching the key-linked value to rerun a Process (for example) smoothly. Has attributes:
+    > A starting pointer 'source' (str)
+    > A 'path' direction (ordered Iterable[Any] or None if no pathing)  
+    > Resolves for the value step by step following the iterable order. Currently resolves through common built-in data types and pandas.DataFrame and pandas.Series. Also can path through another Reference as a user short-cut.
+- New Process Class; container for an operation/function and inputs. Has attributes and methods for:
+    > Associated 'name' (str)
+    > An 'operation' core to execution (Callable or RegisteredFunction or str in case of referring to ModelEngine.functions)
+    > Positional input arguments 'input_args' (Iterable[Any])
+    > Keyword input arguments 'input_kwargs' (dict[str, Any])
+    > Output name key 'output_dest' (str)
+    > Method self.execute(optional ModelEngine and return_output flag); executes the Process (using the engine if given), and returns the output directly (if flagged). Processes any Reference/Deferred inputs to Any/Reference types before execution.
+- New Deferred Class; allows stopping resolving Reference when executing Process (if needed for whatever reason). Executed Deferred becomes the Reference contained in Deferred.reference.
+- New RegisteredFunction Class; saves the Callable's source information into 'source_info' as a SourceInfo class, and retains functionality by containing the 'function' in self.function. Calling this Class calls the contained function.
+- New SourceInfo Class; contains a functions source information. Contains:
+    > The 'module_name' of the function. Is 'builtins' if a Python builtin function.
+    > The 'source_code' of the function, if applicable (not to builtins or code executed in other languages).
+    > The 'source_file' of the function, if applicable.
+    > The list of 'source_lines' of the function, if applicable.
+    > The 'start_line' of the function within the source file, if applicable.
+    > The 'hash_id' of the source code, to distinguish functions/implementations carrying the same function name.
+- Modified the __init__ method in DataManifest to allow initialisation of the dataframe, data source reference (directory/SQLengine) at the start (instead of using DataManifest() then dm.loadManifest(...)).
+- Added data model/dunder methods to DataManifest class. Corrected the __repr__ method.
+- Added Unit and Integration tests for ModelEngine, Reference, Deferred, RegisteredFunction, SourceInfo and Process (final Integration tests not yet complete).
+
 ## [0.5.0] - 2026-02-03
 - Added DataAnalysis.ipynb as an example of conducting data analysis for trading purposes. Trading is not conducted here but some strategies/information is gleaned from the data. Note currently only a small part of ArcaneQuant library is used for this but this will be expanded later as I gain confidence in practical modelling.
 - Added method repairManifest, repairs manifest by removing duplicate columns and conducting full validation. Other repair actions may be added later.
@@ -105,6 +136,9 @@ both if only both are unique.
 ### Added
 - Initial early release
 - Working pandas/.csv file management
+
+
+
 
 
 

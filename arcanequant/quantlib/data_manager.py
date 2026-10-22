@@ -1,10 +1,13 @@
-import pandas as pd
-import requests
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+
+import pandas as pd
+import requests
 import sqlalchemy.engine
-from .DataManifestManager import DataManifest
+
+from .data_manifest_manager import DataManifest
+
 
 # Placeholder class for file name and package importing
 class DataManager():

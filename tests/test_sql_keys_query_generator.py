@@ -1,13 +1,11 @@
+################################################################
+#####################  SET KEYS QUERY TEST  ####################
+################################################################
 # Packages
 import pytest
 
 # My packages
-from arcanequant import DataManifest
-from arcanequant import SetKeysQuery, DropKeysQuery
-
-################################################################
-#####################  SET KEYS QUERY TEST  ####################
-################################################################
+from arcanequant import DataManifest, DropKeysQuery, SetKeysQuery
 
 ################ TEST QUERY AND EXPECTED RESULTS ###############
 ### Primary key

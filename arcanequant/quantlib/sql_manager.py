@@ -1,7 +1,10 @@
+from collections.abc import Iterable
+
 import pandas as pd
 import sqlalchemy
-from typing import Iterable
-from .DataManifestManager import DataManifest
+
+from .data_manifest_manager import DataManifest
+
 
 class SQLManager():
     """Placeholder class for package-level structure or future use."""

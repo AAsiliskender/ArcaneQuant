@@ -4,11 +4,6 @@ from typing import Iterable
 from .DataManager import DataManager
 from dataclasses import dataclass, asdict, fields, field
 
-# Placeholder class for file name and package importing
-class ModelManager():
-    """Placeholder class for package-level structure or future use."""
-    pass
-
 @dataclass
 class ModelEngine():
     """
@@ -178,7 +173,7 @@ class ModelEngine():
         self.labels |= updateDict
 
 
-    def execute_process(self, processName: str, inplace: bool = True, echo=True):
+    def execute_process(self, processName: str, inplace: bool = True, echo = True):
         """
         Executes a specific item in processDict (i.e. one process) by running the relevant pipeline on data
         filtered using self.labels. Can adds to/update ModelEngine.modelsDict if "inplace" enabled, returns
@@ -199,41 +194,64 @@ class ModelEngine():
             iterables each of length n (e.g. if lambda x,y: x+y on 3 columns, then label can be (["a","c","e"], ["b","d","f"]),
             this would add "a" with "b", "c" with "d" and so on.)
         """
-        # Process (operationName, dataLabel)
-        operationName, labelName = self.processDict[processName] # dataLabel can be string or iterable
+        # Process (operationName, labelName)
+        operationName, labelName = self.processDict[processName] # labelName can be string or iterable
         
-        # Get data label from labelName
-        dataLabel = self.labels[labelName]
+        ### Get data label from labelName
+        # Note: Here we allow for multiple labels (each label can even indicate more than one column)
+        dataCols = []
+        if isinstance(labelName, str): # If one label given
+            dataCols = self.labels[labelName]
+        else: # If multiple given, unpack as needed (if indicates more than one column) and stack up
+            ################# TODO: FIX THIS TO ALLOW MULTI-CAST MULTI-ARG ETC.
+            ################# UNPACK ALL IF 1 ARG OP (IF MULTI-CAST MAKE SURE COL NAMES ARE GOOD), IF MULTIPLE ARG AND UNPACKED COL COUNT = ARG -> UNPACK.
+            ################# IF MULT ARG AND UNPACKED COL COUNT = k*ARG COUNT,  THEN PACK 1 LEVEL HIGHER AND USE AS MULTICAST
+            for label in labelName:
+                labelComp = self.labels[label]
 
-        # Pack dataLabel if not iterable (to unpack and allow iterable use)
-        if isinstance(dataLabel, str): # i.e. label is direct string, no tuple or tuple(iterable) (1-arg, single cast)
-            dataLabel = [dataLabel]
-        elif not isinstance(dataLabel, list):
-            dataLabel = list(dataLabel) # Convert any non-list iterable to list
-        # To use a single argument function on multiple columns (individually), need code to
-        # read an iterable containing only one list of the column names
+                # If label indicates one column
+                if isinstance(labelComp, str):
+                    dataCols.append(labelComp)
+                else: # If label indicates more than one column
+                    for col in labelComp:
+                        dataCols.append(col)
 
-        # Copy required data columns (shallow) and merge with relevant models data
+        # Pack dataCols if not iterable (to unpack and allow iterable use)
+        if isinstance(dataCols, str): # i.e. label is direct string, no tuple or tuple(iterable) (1-arg, single cast)
+            dataCols = [dataCols]
+        elif not isinstance(dataCols, list):
+            dataCols = list(dataCols) # Convert any non-list iterable to list
+
+        # labelName above gets names of sets of columns (in their order if multiple), while the dataCols puts into all into a list (i.e. unpacks sets) 
+
+        # Copy required data columns (shallow) and merge with relevant models data (in case model needs to reuse produced data)
         copyData = self.data.copy()
         copyModels = self.models()
-        tempData = pd.concat([copyData, copyModels], axis=1)
+        inputData = pd.concat([copyData, copyModels], axis=1) # Data pool to be used in process (to be slimmed down)
 
-        # Select columns of tempData based on input and distinguish single and multi-cast use
+        # Error check: dataCols names must all be in column list of inputData (otherwise data is missing)
+        tempDataColSet = set(inputData.columns)
+        requestedColSet = set(dataCols)
+        if tempDataColSet.intersection(requestedColSet) != requestedColSet:
+            raise ValueError("The required data columns indicated by the labels is missing from the dataset.")
+
+        # Select columns of inputData based on input and distinguish single and multi-cast use
         multiCast = False # Trigger for multicast labelling (operation_input_columns)
-        if all(isinstance(label, str) for label in dataLabel):
+        ################# TODO: THIS MAY BE UNNECESSARY SINCE ALL LABELS AND ASSOCIATED COLS ARE UNPACKED BEFOREHAND ~LINE 210
+        if all(isinstance(label, str) for label in dataCols):
             # If str or iterable(str), then single-cast (any argument count)
-            tempData = tempData[dataLabel]
+            inputData = inputData[dataCols]
 
-        elif all(isinstance(label, Iterable) for label in dataLabel):
+        elif all(isinstance(label, Iterable) for label in dataCols):
             # Iterable of labels for multicasting - execute multiple times
             import itertools # Easier as method exists (and more optimised)
             multiCast = True
 
-            # Get all dataLabel in a single list (for filtering dataframe)
-            labelFilter = list(itertools.chain(*dataLabel))
+            # Get all dataCols in a single list (for filtering dataframe)
+            labelFilter = list(itertools.chain(*dataCols))
             # Drop duplicates in list
             labelFilter = list(set(labelFilter))
-            tempData = tempData[labelFilter]                 
+            inputData = inputData[labelFilter]                 
         else:
             raise TypeError("The set of label(s) provided must be either all strings or all iterables")
 
@@ -241,18 +259,17 @@ class ModelEngine():
         operation = self.ops[operationName]
 
         # Error check (if operation args count =/= datalabel length, raise error)
-        if len(dataLabel) != operation.__code__.co_argcount:
-            raise ValueError(f"The process argument count ({operation.__code__.co_argcount}) does not match the inputted data label count ({len(dataLabel)}).")
+        if len(dataCols) != operation.__code__.co_argcount:
+            raise ValueError(f"The process argument count ({operation.__code__.co_argcount}) does not match the inputted data label count ({len(dataCols)}).")
 
-        # Get data subset from labels and separate 
-        inputData = tempData.copy()
-
-        # Split cols into list (to use as arguments) 
+        # Get data subset from labels and separate into list (to use as arguments) 
         inputCols = []
-        for label in dataLabel:
-            inputCols.append(inputData[label]) # List of columns needed for arguments
 
-        # Execute process operation (set to a dict)
+        # Split each col and add to list to use as argument
+        for colidx in range(len(inputData.columns)):
+            inputCols.append(inputData.iloc[:,colidx])
+
+        ### Execute process operation (set to a dict)
         result=[]
 
         # We now execute the operation based on if it is multi-casted or single-casted (inputCols or its derivative is in a list
@@ -270,7 +287,7 @@ class ModelEngine():
                 raise TypeError("The inputted column groups for the multi-argument function must be the same length") 
             
             # Group all corresponding columns before applying to function
-            combos = list(zip(*dataLabel))
+            combos = list(zip(*dataCols))
 
             # Pick each column from each dataframe and group, and execute it
             result = []
@@ -294,7 +311,7 @@ class ModelEngine():
         elif all(isinstance(x, pd.Series) for x in inputCols):
             # If single-argument
             if echo:
-                print(f"Single-casting Function \"{processName}\" on {dataLabel}")
+                print(f"Single-casting Function \"{processName}\" on {dataCols}")
 
             result = operation(*inputCols) # *var unpacks columns to be used for function
             result.rename(processName, inplace=True) # Rename to process name
@@ -322,22 +339,22 @@ class ModelEngine():
         else:
             return result
     
-    def execute_pipeline(self, pipelineName: str, showAll: bool = True):
+    def execute_pipeline(self, pipelineName: str, preserve: bool = True):
         """
         Executes a single pipeline item in pipelineDict by running all process in the pipeline in order. Adds
-        the final process output to ModelEngine.model, but also adds all process outputs if 'showAll' enabled.
+        the final process output to ModelEngine.model, but also adds all process outputs if 'preserve' enabled.
         
         Inputs:
         - pipelineName - String of the pipeline dictionary name to be executed.
-        - showAll - Bool indicating to add all process outputs (instead of only the final process).
+        - preserve - Bool indicating to add all process outputs (instead of only the final process) to ModelEngine.model.
         """
-        # If no showAll, copy self.modelsDict and self.labels into dummy, execute as if showAll exists, then reinstate
+        # If no preserve, copy self.modelsDict and self.labels into dummy, execute as if preserve exists, then reinstate
         # original dummy self.modelsDict and self.labels and add final process output
         # Odd workaround, but if it works...
 
         dummyModels = {}
         dummyLabels = {}
-        if not showAll:
+        if not preserve:
             dummyModels = self.modelsDict.copy()
             dummyLabels = self.labels.copy()
 
@@ -353,7 +370,7 @@ class ModelEngine():
             self.execute_process(process, True) # Add process output to modelsDict
 
         # Workaround
-        if not showAll:
+        if not preserve:
             lastProcessName = pipeline[-1]
             lastProcess = self.modelsDict[lastProcessName]
 
@@ -364,19 +381,19 @@ class ModelEngine():
 
         return
 
-    def execute_all_pipe(self, showAll: bool = True):
+    def execute_all_pipe(self, preserve: bool = True):
         """
         Executes pipelines in pipelineDict (in order of key).
 
         Inputs:
-        - showAll - Bool indicating to add each pipelines' process outputs (instead of only the final process).
+        - preserve - Bool indicating to add each pipelines' process outputs (instead of only the final process).
 
-        Note: Having showAll = False will raise errors if a pipeline depends on other pipelines' intermediate
+        Note: Having preserve = False will raise errors if a pipeline depends on other pipelines' intermediate
         output(s) for information/labels.
         """
 
         for pipeName in list(self.pipelineDict.keys()):
-            self.execute_pipeline(pipeName, showAll=showAll)
+            self.execute_pipeline(pipeName, preserve=preserve)
     
     def models(self):
         "Outputs the models from self.modelsDict in pandas.DataFrame format."

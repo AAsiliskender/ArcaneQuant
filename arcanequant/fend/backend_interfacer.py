@@ -1,21 +1,43 @@
-from PySide6.QtCore import QObject, Slot, QUrl, Property, Signal, QAbstractTableModel, Qt, QAbstractListModel, QModelIndex, QStringListModel
 from pathlib import Path
+
+import pandas as pd
+from PySide6.QtCore import (
+    Property,
+    QAbstractListModel,
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    QStringListModel,
+    Qt,
+    QUrl,
+    Signal,
+    Slot,
+)
 
 # Import dependent stuff
 from sqlalchemy import engine
-import pandas as pd
+
+from ..quantlib.data_manager import DownloadIntraday, ExtractData
 
 # Import whole classes
-from ..quantlib.DataManifestManager import DataManifest
-from ..quantlib.DataManager import DownloadIntraday, ExtractData
+from ..quantlib.data_manifest_manager import DataManifest
+
 # Import functions in classes
-from ..quantlib.SQLManager import SQLSetup, SQLEstablish, SQLRepair, SQLSave, SQLSync, SQLClear, SQLNuke, ExecuteSQL
+from ..quantlib.sql_manager import (
+    ExecuteSQL,
+    SQLClear,
+    SQLEstablish,
+    SQLNuke,
+    SQLRepair,
+    SQLSave,
+    SQLSetup,
+    SQLSync,
+)
 
 #import utils # Import function to save outputdata
 # TODO: CREATE A FUNCTION THAT TAKES OUTPUT FROM APP AND SAVES
 
-### Backend is used by QML to interact with pure python code (mostly using wrappers)
-# 
+### Backend is used by QML to interact with pure python code (mostly using wrappers/decorators)
 class Backend(QObject):
     def __init__(self):
         super().__init__()
@@ -24,7 +46,7 @@ class Backend(QObject):
         self.data_manifest = None   # This holds DataManifest instance (and its path/engine as needed)
         self.engine = None          # This holds SQLAlchemy Engine (if given)
 
-        self.base_path = Path(".").resolve() # Holds base path
+        self.base_path = Path.cwd() # Holds base path
         self.base_url = QUrl.fromLocalFile(str(self.base_path)) # Holds base path (in url form)
 
         self.curr_path_env = self.base_path # Initialise from base

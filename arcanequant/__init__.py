@@ -3,54 +3,62 @@
 ### Here we initialise important libraries and variables.
 
 # Import pandas (python data analysis lib) and data analysis packages
-#%matplotlib inline
-import numpy as np
-from scipy import stats
-import pandas as pd
-#import pandas_ta as ta # TODO: FIX
-import matplotlib.pyplot as plt
-import statsmodels.api as sm
+def initialise():
+        
+    #%matplotlib inline
+    import copy
+    import json
 
+    #import yfinance as yf # TODO: INSTALL THESE LATER
+    #import tradingview_scraper as tvs
+    #from selenium import webdriver
+    #from selenium.webdriver.chrome.options import Options
+    #from tradingview_scraper.symbols.ideas import Ideas
+    # Other libs (system, graphical or time-compute analysis)
+    import os
+    import time
+    from ast import literal_eval
+    from datetime import datetime
+    from io import StringIO
+    from pathlib import Path
 
-#user_header = {'user-agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
-#                                AppleWebKit/537.36 (KHTML, like Gecko) \
-#                                Chrome/122.0.0.0 Safari/537.36'}
+    #import pandas_ta as ta # TODO: FIX
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import psycopg2
 
-# Webscrape libs
-from bs4 import BeautifulSoup
-#import yfinance as yf # TODO: INSTALL THESE LATER
-#import tradingview_scraper as tvs
-#from selenium import webdriver
-#from selenium.webdriver.chrome.options import Options
-#from tradingview_scraper.symbols.ideas import Ideas
+    #import unittest
+    import pytest
+    import requests
+    import sqlalchemy.exc as sqlexc
+    import statsmodels.api as sm
 
-# Other libs (system, graphical or time-compute analysis)
-import os
-from io import StringIO
-import psycopg2
-from dotenv import load_dotenv, find_dotenv
-from dotenv.main import set_key
-from sqlalchemy import create_engine, text
-from sqlalchemy import types as sqltype
-import sqlalchemy.exc as sqlexc
-from colorama import Fore, Back, Style
-import copy
-from pathlib import Path
-import time
-from datetime import datetime
-import requests
-from ast import literal_eval
-import json
-import unittest
-import pytest
+    #user_header = {'user-agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
+    #                                AppleWebKit/537.36 (KHTML, like Gecko) \
+    #                                Chrome/122.0.0.0 Safari/537.36'}
+    # Webscrape libs
+    from bs4 import BeautifulSoup  #Use this for now
+    from colorama import Back, Fore, Style
+    from dotenv import find_dotenv, load_dotenv
+    from dotenv.main import set_key
+    from scipy import stats
+    from sqlalchemy import create_engine, text
+    from sqlalchemy import types as sqltype
 
-#import warnings
+    #import warnings
+
+initialise()
 
 # My packages
 # For when 'from arcanequant import *' is used
 __all__ = ["DataManifest",
-           "DownloadIntraday", "ExtractData",
-           "SQLSetup", "SQLEstablish", "SQLRepair", "SQLSave", "SQLSync", "SQLClear", "SQLNuke", "SetKeysQuery", "DropKeysQuery", "ExecuteSQL", "DFtoSQLFormat", "SQLtoDFFormat"]
+    "DownloadIntraday", "ExtractData",
+    "ModelEngine", "Process", "Pipeline",
+    "RegisteredFunction", "SourceInfo",
+    "Deferred", "Reference",
+    "SQLSetup", "SQLEstablish", "SQLRepair", "SQLSave", "SQLSync", "SQLClear", "SQLNuke", "SetKeysQuery", "DropKeysQuery", "ExecuteSQL", "DFtoSQLFormat", "SQLtoDFFormat"
+    ]
 
 # Relative imports (child) (i.e. from arcanequant import DataManifest (relies on quantlib folder))
 from .quantlib import *

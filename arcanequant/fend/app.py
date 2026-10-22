@@ -2,14 +2,13 @@ from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QPu
 from PySide6.QtQml import QQmlApplicationEngine
 
 # Import backend interfacer
-from .backendInterfacer import Backend
+from .backend_interfacer import Backend
 
 # Only needed for access to command line arguments
 import sys
 
-# You need one (and only one) QApplication instance per application.
-# Pass in sys.argv to allow command line arguments for your app.
-# If you know you won't use command line arguments QApplication([]) works too.
+# Need one (and only one) QApplication instance per application.
+# Pass in sys.argv to allow command line arguments for app.
 app = QApplication(sys.argv)
 
 # Create a Qt widget, which will be our window.
@@ -37,10 +36,7 @@ print(f"Screen width: {size.width()}, height: {size.height()}")
 # Start the event loop.
 app.exec()
 
-# Your application won't reach here until you exit and the event
-# loop has stopped.
-
-
+# Application won't reach here until exit and the event loop has stopped.
 class CLIWidget(QWidget):
     def __init__(self):
         super().__init__()

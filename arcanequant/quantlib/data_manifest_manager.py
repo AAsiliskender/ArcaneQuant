@@ -1,35 +1,27 @@
-from pathlib import Path
-from dotenv import load_dotenv, find_dotenv
-import os
-from io import StringIO
-from ast import literal_eval
 #from datetime import datetime
 import json
+import os
+from ast import literal_eval
+from collections.abc import Iterable
+from io import StringIO
+from pathlib import Path
+
 import pandas as pd
 import sqlalchemy
+from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine, text
-from typing import Iterable
 
-
+# NOTE:
 # CREATE A COMPRESSED MANIFEST (YEARS AND STOCKS ONLY, 2 INDICATES AN INCOMPLETE POINT (I.E. NOT ALL MONTHS OR NOT ALL INTERVALS)
 
-# VALIDATION IS STILL DONE ONLY VIA CSV FILES
-# MAYBE CAN EXTEND VALIDATION TO RELY ALSO ON DATABASE
+# CAN EXTEND VALIDATION TO RELY ALSO ON DATABASE
 # CAN MAKE VALIDATION BE CHECKED THROUGH ONLY DIRECT FILES, THROUGH DATABASE OR A CROSS-CHECK
-
-# MODIFY DOWNLOADINTRADAY TO ADD SAVE SETTING (SAVE AS SQL OR JSON OPTIONS, AND MAYBE ADD CSV OPTION)
 
 # CONSIDERING TIMEZONE CASTING (FOR LATER) - FUNCTION NAMED CONTEXTUALISE (I.E. USING THE META DATA)?
 
-# CREATE DATAMANAGER FILE/CLASS TO MANAGE DATA SPECIFICALLY (RATHER THAN JUST MANIFEST OR MANIFEST-RELATED STUFF)
-# SHOULD CONTAIN DOWNLOAD INTRADAY AND EXTRACT DATA (CAN ALSO HAVE SAVE DATA WHICH POINTS TO SQLSAVE OR SAVECSV)
-# MAKE A FUNCTION TO SAVE A FILE TO CSV? (WITH ADDITIONAL PARAMETERS? CURRENTLY NOTHING TO CALL TO SAVE TO CSV)
+# ADD CODE TO DIRECTLY API CALL POST-PROCESS DATA (TECH INDICATORS) (ALSO MAKE CODE TO PROCESS IN HOUSE IF DESIRED) (ALSO CODE FOR DIFFERENT APIs)
+# MAY NEED CODE TO ASSESS ANY STOCKSPLIT INFORMATION AND EITHER MARK FOR RENEW DATA FROM API OR EDIT EXISTING DATA AS NEEDED
 
-# ADD CODE TO DIRECTLY API CALL POST-PROCESS DATA (TECH INDICATORS) (ALSO MAKE CODE TO PROCESS IN HOUSE IF DESIRED)
-# WILL NEED CODE TO ASSESS ANY STOCKSPLIT INFORMATION AND EITHER MARK FOR RENEW DATA FROM API OR EDIT EXISTING DATA AS NEEDED
-
-# ADD SAVEDATA_SQL - LOADS A FILE FROM CSV AND SAVES INTO SQL.
-# MAY NEED TO REMOVE LOADDATA_FROMSQL 
 
 # Placeholder class for file name and package importing
 class DataManifestManager():
@@ -47,7 +39,15 @@ class DataManifest():
     This class also has functions and methods to easily modify values as needed as well as verifying the presence of files.
     The data represented by the manifest can be loaded from its .csv form or from its database (postgreSQL) form.
     The data manifest dataframe itself can be saved or loaded from .json form or from its database (postgreSQL) form.
-    The individual data points (indicated in the manifest) can be saved to (SQL) database from here. 
+    The individual data points (indicated in the manifest) can be saved to (SQL) database from here.
+
+    Optional Initialisation Inputs:
+    - DF - DataFrame, the core DataFrame of the DataManifest.
+    - DFshort - DataFrame, the truncated DataFrame of the DataManifest showing only the data for years (and for all intervals). [This is not implemented yet].
+    - directory - String, indicating the location of the DataManifest (.json) file.
+    - fileName - String, indicating the name of the DataManifest (.json) file.
+    - SQLEngine - SQL engine, providing the connection to the SQL database.
+
     Note:
     - Consider manifest size and data size (of the range of data you use), SQL is better at working with very large datasets.
     - To save all existing data to SQL (instead of one datapoint), use SQLSync from SQLManager.
@@ -71,15 +71,28 @@ class DataManifest():
     > repairManifest - Repairs manifest.
     """
         
-    def __init__(self):
-        self.DF = pd.DataFrame(index = pd.MultiIndex(levels = [[],[]], codes = [[],[]], names=['Ticker','Interval']), columns = pd.Index(data = [],name = 'Month'))
-         # TODO: CHECK VALIDITY OF SHORTFORM MANIFEST
-        self.DFshort = pd.DataFrame(index = pd.Index(data = [],name = 'Ticker'), columns = pd.Index(data = [],name = 'Month'))
-        self.directory = None
-        self.fileName = 'dataManifest'
-        self.SQLengine = None
-        
+    def __init__(self, **kwargs):
+        # Initially search kwargs for settings, if specific attributes None, set to default (like fileName = 'dataManifest')
+        self.DF = kwargs.get('DF')
+        self.DFshort = kwargs.get('DFshort')
+        self.directory = kwargs.get('directory')
+        self.fileName = kwargs.get('fileName')
+        self.SQLengine = kwargs.get('SQLengine')
+
+        # Setting default values if kwarg not found
+        if self.DF is None:
+            self.DF = pd.DataFrame(index = pd.MultiIndex(levels = [[],[]], codes = [[],[]], names=['Ticker','Interval']), columns = pd.Index(data = [],name = 'Month'))
+
+        if self.DFshort is None:
+            # TODO: CHECK VALIDITY OF SHORTFORM MANIFEST
+            self.DFshort = pd.DataFrame(index = pd.Index(data = [],name = 'Ticker'), columns = pd.Index(data = [],name = 'Month'))
+
+        if self.fileName is None:
+            self.fileName = 'dataManifest'
+
         print('Data Manifest Initialised') # Also runs during startup
+
+
 
     def __str__(self):
         total = 0
@@ -87,10 +100,17 @@ class DataManifest():
             for item in col:
                 if item == 1:
                     total += 1
-        return f"""DataManifest with filename "{self.fileName}" of directory "{self.directory}" and SQL engine {self.SQLengine}. Total completed files: {2*total}."""
+        return f"""DataManifest with filename "{self.fileName}" of directory "{self.directory}" and SQL engine {self.SQLengine}. Total completed files: {2*total}. DF dimensions: {self.DF.shape}."""
 
     def __repr__(self):
-        return f'DataManifest(fileName = {self.fileName}, directory = {self.directory}, SQLengine = {self.SQLengine}). DF dimensions: {self.DF.shape}'
+        """Representation of this object. Note that using the outputted string is very long if self.DF exists."""
+        return f'DataManifest(DF={repr(self.DF)}, DFshort={repr(self.DFshort)}, fileName = {self.fileName}, directory = {self.directory}, SQLengine = {repr(self.SQLengine)})'
+
+    def __len__(self):
+        if self.DF is None:
+            return 0
+        return len(self.DF)
+
 
     # Validate Manifest Data (check if file exists, add to manifest or set to 1, else set to 0 or remove)
     def validateManifest(self, fastValidate = True, echo = True):
@@ -255,7 +275,7 @@ class DataManifest():
         This method updates a value in the DataManifest's DataFrame.
         The method adds columns/indices as necessary.
         """
-        if value != 0 and value != 1 and value != 2: raise ValueError('Manifest values must be set to 0, 1 or 2')
+        if value not in [0,1,2]: raise ValueError('Manifest values must be set to 0, 1 or 2')
 
         # If any of the symbol, interval (for the symbol) and month values are new, fill all NaNs as 0 in the new rows/cols
         uniqueSymbols = list(self.DF.index.get_level_values(0).unique().values)
@@ -550,15 +570,9 @@ class DataManifest():
         if echo: print("Validating manifest data")
         self.validateManifest(fastValidate=False)
 
-        
-
-
 ##################################
 ##################################
 
-# ADD CODE TO STITCH TOGETHER SPECIFIC DATA PARTS FROM DIFFERENT SETS FOR ANALYSIS (CORRELATION ETC.)
-# ADD CODE TO DIRECTLY API CALL POST-PROCESS DATA (TECH INDICATORS) (ALSO MAKE CODE TO PROCESS IN HOUSE IF DESIRED)
-# WILL NEED CODE TO ASSESS ANY STOCKSPLIT INFORMATION AND EITHER MARK FOR RENEW DATA FROM API OR EDIT EXISTING DATA AS NEEDED
 
 ##################################
 ##################################

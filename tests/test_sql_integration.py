@@ -1,3 +1,7 @@
+################################################################
+##################### FULL INTEGRATION TEST ####################
+################################################################
+
 # Full Integraton Testing of DataManifest - SQLAlchemy - SQLManager - Pandas systems.
 
 # 1) Tests the SQLExecute function with database (direct query) and pandas (read_sql_query function)
@@ -8,26 +12,21 @@
 # All other functions used for DataManifest - SQL interaction are derived from functions/methods used here  
 
 # Packages
-import pytest
 import pandas as pd
-from tabulate import tabulate
 import psycopg2
+import pytest
 import sqlalchemy
-from sqlalchemy import text
 import sqlalchemy.exc as sqlexc
+from sqlalchemy import text
 from sqlalchemy import types as sqltype
-
+from tabulate import tabulate
 
 # My packages
-from arcanequant import DataManifest
-from arcanequant import ExecuteSQL, SetKeysQuery, DropKeysQuery
-from test_SQLExecution import setup_SQLtestengine
+from arcanequant import DataManifest, DropKeysQuery, ExecuteSQL, SetKeysQuery
+from tests.test_sql_execution import setup_SQLtestengine
 
 # need sqlalchemy (and docker imports, after learning to set up docker)
 
-################################################################
-##################### FULL INTEGRATION TEST ####################
-################################################################
 # Test by:
 # Using some valid inputs twice (check for if exists removal error, should not happen)
 # Setting a column as foreign of another key (which has a different datatype)
