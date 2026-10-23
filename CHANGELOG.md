@@ -1,5 +1,10 @@
 ##### CHANGELOG
 
+## [0.6.1] - 2026-10-23
+- Rewrote some of the code in commitupdate.ps1:
+    > Added redundant checks for commit history and bump2version execution
+    > Instead of rebasing, squashes commits by using soft reset, and commits the staged (but otherwise uncommitted) changes
+
 ## [0.6.0] - 2026-10-22
 - Refactored Python file names to match PEP 8 convention.
 - Completely refactored ModelEngine:
@@ -136,6 +141,7 @@ both if only both are unique.
 ### Added
 - Initial early release
 - Working pandas/.csv file management
+
 
 
 

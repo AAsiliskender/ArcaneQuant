@@ -1,13 +1,15 @@
 # commitupdate.ps1
 
-# Note to user, if update fails past bumping, tag will be updated and must be deleted before being repeated (or may cause a hassle)
-
 # Get part update from user
 $part = Read-Host "Enter the update type (patch/minor/major)"
 
 # Prompt for multi-line commit message
 Write-Host "Enter the commit message (finish with Ctrl+Z then Enter):"
 $msg = [Console]::In.ReadToEnd()
+
+# Get the original commit (will squash commits to this)
+$startCommit = git rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { throw "Cannot identify starting commit." }
 
 # 1. Stage all changes
 Write-Host "Staging main changes"
@@ -22,6 +24,9 @@ $msg
 # 3. Bump the version
 Write-Host "Bumping version with tagging"
 bump2version --config-file .bumpversion.cfg $part
+if ($LASTEXITCODE -ne 0) {
+    throw "bump2version failed with exit code $LASTEXITCODE."
+}
 
 # 4. Edit the CHANGELOG to include the right message
 Write-Host "Updating CHANGELOG.md with commit message"
@@ -49,13 +54,15 @@ git add .
 Write-Host "Committing CHANGELOG as empty"
 git commit --allow-empty-message -F NUL
 
-# 7. Interactively squash the version bump + changelog into the main commit
-Read-Host "Rebasing: Change second and third commits to squash, then save and exit (:wq!). Press Enter to continue..."
+# 7. Squash the version bump + changelog into the main commit
+Read-Host "Squashing commits by making soft reset. Press Enter to continue..."
 # Identify the target commit before resetting
 $target = git rev-parse HEAD~3
-
 if ($LASTEXITCODE -ne 0) {
     throw "Cannot identify reset target."
+}
+if ($startCommit -ne $target) {
+    throw "Unexpected commit history. Aborting reset."
 }
 
 Write-Host "`nCurrent HEAD:"
@@ -67,25 +74,20 @@ git log -1 --format="%h %s" $target
 Write-Host "`nCommits that will be squashed:"
 git log --oneline "$target..HEAD"
 
-$confirm = Read-Host "`nReset HEAD to $target while preserving staged changes? (y/N)"
-
-if ($confirm -ne "y") {
-    throw "Reset cancelled."
-}
-
+### Squash by soft reset
+$confirm = Read-Host "`nReset HEAD to $target while preserving staged changes? (Y/N)"
+if ($confirm -ne "Y") { throw "Reset cancelled." }
 git reset --soft $target
+if ($LASTEXITCODE -ne 0) { throw "Reset failed." }
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Reset failed."
-}
+# Create the final signed commit
+git commit -S -m $msg
+if ($LASTEXITCODE -ne 0) { throw "Commit failed." }
 
-# git reset --soft HEAD~3
-# git commit -S -m $msg
-# git tag -s "v$vers" -m "Version $vers"
 
-# In the editor:
-# Change the 2nd and 3rd "pick" to "squash"
-# Save and exit (:wq or Ctrl+X → Y → Enter)
+# Attach a signed tag to the newly created commit
+git tag -s "$vers" -m "Version $vers"
+if ($LASTEXITCODE -ne 0) { throw "Tag creation failed." }
 
 # 8. Push (no force needed if this is the first push)
 Read-Host "Pushing to Git. Press Enter to continue..."
