@@ -79,8 +79,10 @@ duplicates column in dataframe. Made method to fix duplicates in dataframe, but 
 
 ### HOW TO USE COMMITUPDATE.PS1
 - Launch and type major (X+1.0.0) or minor (X.Y+1.0) or patch (X.Y.Z+1)
-- Paste (or type) the commit message, and end with Ctrl+Z and Enter
-- After getting rebasing message, press Enter and change 2nd and 3rd commit lines from 'commit' to 'squash' then save and exit by pressing Escape then type :wq! then press Enter
+- Paste (or type) the commit message, press Enter (new line), and end with Ctrl+Z and Enter
+- Continue (press Enter) after getting 'starting commit squash' message
+- Accept (Y) soft reset message
+- Final accept to do git push
 
 ### THIS GIT COMMIT:
 - Rewrote some of the code in commitupdate.ps1:

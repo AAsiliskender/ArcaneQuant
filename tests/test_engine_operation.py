@@ -6,6 +6,7 @@ import pytest
 
 from arcanequant import ModelEngine, Process, Reference, RegisteredFunction
 
+# Note that each test case counts as one test no matter the number of assertions
 
 ######################################################################
 ##################### EXAMPLE FUNCTIONS FOR TEST #####################
@@ -49,7 +50,7 @@ engineAssignExpected = (
     {('cFunction', math.sin), ('cFunctionRF', RegisteredFunction(math.sin))},
     {('custom', integrationTestFunction), ('customRF', RegisteredFunction(integrationTestFunction))}
 )
-engineAssignParams = zip(engineAssignFunctions, engineAssignNames, engineAssignExpected)
+engineAssignParams = list(zip(engineAssignFunctions, engineAssignNames, engineAssignExpected))
 
 @pytest.mark.parametrize("operation, name, expected", engineAssignParams)
 def test_engine_assign(operation: Callable, name: str, expected: set, setup_empty_modelengine: ModelEngine):
@@ -78,7 +79,7 @@ def test_engine_register(operation: Callable, setup_functions_partial_modelengin
 ### Engine function/RegisteredFunction getter test
 engineGetterFunctions = (round, math.sin, integrationTestFunction)
 engineGetterNames = ('inbuilt', 'cFunction', 'custom')
-engineGetterParams = zip(engineGetterFunctions, engineGetterNames)
+engineGetterParams = list(zip(engineGetterFunctions, engineGetterNames))
 
 @pytest.mark.parametrize("operation, name", engineGetterParams)
 def test_engine_getters(operation: Callable, name: str, setup_functions_partial_modelengine: Callable):
@@ -108,7 +109,7 @@ def test_engine_register_unregister(operation: Callable, setup_empty_modelengine
 ### Engine operation standardisation
 engineStandardisationFunctions = (round, math.sin, integrationTestFunction)
 engineStandardisationNames = ('inbuilt', 'cFunction', 'custom')
-engineStandardisationParams = zip(engineStandardisationFunctions, engineStandardisationNames)
+engineStandardisationParams = list(zip(engineStandardisationFunctions, engineStandardisationNames))
 
 # Standardising functions on an empty ModelEngine
 @pytest.mark.parametrize("operation", engineStandardisationFunctions)
@@ -165,7 +166,7 @@ def test_engine_standardise_existing_registeredFunction(operation: Callable, set
 assignRefSource = ('list', 'params', 'params')
 assignRefPath = ([], ['ratio'], ['expon'])
 assignRefName = ('x', 'r', 'e')
-assignRefParams = zip(assignRefName, assignRefSource, assignRefPath)
+assignRefParams = list(zip(assignRefName, assignRefSource, assignRefPath))
 
 # Assigning References to ModelEngine
 @pytest.mark.parametrize("name, source, path", assignRefParams)
@@ -186,9 +187,10 @@ def test_engine_ref_getter(name: str, source: str, path: list, setup_empty_model
     assert engine.ref(name) == Reference(source, path)
 
 
-#########################################################################################
-##################### PROCESSES/REGISTEREDFUNCTION INTEGRATION TEST #####################
-#########################################################################################
+######################################################################
+################### PROCESS TEST SETUP AND HELPERS ###################
+######################################################################
+
 ratio = 0.1
 expon = 2
 testNum = -13
@@ -199,243 +201,165 @@ ref1 = Reference('list', [])
 ref2 = Reference('params', ['ratio'])
 ref3 = Reference('params', ['expon'])
 
-testDf = pd.DataFrame(data=[pd.Series(ref1.resolve(mEngine))*i for i in range(1,11)])
-testDf2 = pd.DataFrame(data=[pd.Series(ref1.resolve(mEngine)) for _ in range(1,11)])
+def setup_process_modelengine() -> ModelEngine:
+    """Build a populated engine directly, including inputs for process test cases."""
+    engine = ModelEngine()
+    for operation, name in ((round, 'inbuilt'), (math.sin, 'cFunction'), (integrationTestFunction, 'custom')):
+        engine.assign(operation.__name__, operation)
+        engine.assign(name, operation)
+        engine.assign(f'{name}RF', RegisteredFunction(operation))
 
-# Creating Processes using different function, input types
+    engine.assign('numbers', [0.501, math.pi])
+    engine.assign('list', list(range(1, 11)))
+    engine.assign('idx', 3)
+    engine.assign('params', {'expon': expon, 'ratio': ratio})
+    engine.assign('x', ref1)
+    engine.assign('r', ref2)
+    engine.assign('e', ref3)
+    values = pd.Series(ref1.resolve(engine))
+    engine.assign('df', pd.DataFrame([values * i for i in range(1, 11)]))
+    engine.assign('df2', pd.DataFrame([values for _ in range(10)]))
+    return engine
+
+
+mEngine = setup_process_modelengine()
+testDf = mEngine.assets['df']
+testDf2 = mEngine.assets['df2']
+
+### Creating, assigning and executing processes using different operation and input types
 createProcessName = (
     'simpleProcess', 'standardisedProcess', 'addProcess',
     'baseProcess', 'baseAddProcess', 'registeredFunctionProcess', 'registeredFunctionStringProcess',
     'assignedProcess', 'assignedFunctionRefProcess',
     'standardisedStringProcess', 'standardisedFunctionProcess',
-    'directRefProcess', 'refViaEngineProcess'
+    'directRefProcess', 'refViaEngineProcess',
 )
 createProcessFunction = (
     simpleFct, simpleFct, simpleFct,
     integrationTestFunction, integrationTestFunction, RegisteredFunction(integrationTestFunction), 'customRF',
     'custom', 'custom',
     'custom', integrationTestFunction,
-    integrationTestFunction, integrationTestFunction
+    integrationTestFunction, integrationTestFunction,
 )
 createProcessInputs = (
     [testNum], [testNum], [testNum],
     [testDf, ratio, expon], [testDf, ratio2, expon], [testDf, ratio, expon], [testDf, ratio2, expon],
     [testDf, ratio3, expon], [mEngine.assets['df'], mEngine.ref('r'), mEngine.ref('e')],
     [testDf, ratio, expon], [testDf, ratio3, expon],
-    [mEngine.assets['df'], ref2, ref3], [mEngine.assets['df'], mEngine.ref('r'), mEngine.ref('e')]
-
+    [mEngine.assets['df'], ref2, ref3], [mEngine.assets['df'], mEngine.ref('r'), mEngine.ref('e')],
 )
-createProcessOutputs = ()
-createProcessFailStr = (
-    "Creating process with one input",
+createProcessOutputs = (
+    13, 13, 13,
+    148.225, 296.45, 148.225, 296.45,
+    14822.5, 148.225,
+    148.225, 14822.5,
+    148.225, 148.225
 )
 
-@pytest.mark.parametrize("", )
-def test_process_creation():
-    ...
-
-
-
-
-
-
-# Standardising Processes
-standardiseProcessName = (
-    'standardisedProcess', 'standardisedFunctionProcess', 'standardisedStringProcess', 
+createProcessMethod = (
+    'assign', 'standardise', 'add',
+    'assign', 'add', 'assign', 'assign',
+    'assign', 'assign', 'standardise', 'standardise', 'assign', 'assign',
 )
-standardiseProcessFunction = (
-    simpleFct, integrationTestFunction, 'custom',
+createProcessParams = list(zip(
+    (mEngine,) * len(createProcessName), createProcessName, createProcessFunction,
+    createProcessInputs, createProcessOutputs, createProcessMethod,
+))
+
+def check_process_creation(engine: ModelEngine, name: str, operation, inputs: list, expected: float, method: str):
+    # Keep registry changes local so each case can also run independently.
+    engine = ModelEngine(assets=engine.assets.copy(), aliases=engine.aliases.copy(), functions=engine.functions.copy())
+    process = Process(name, operation, inputs)
+    assert process.name == name
+    assert process.operation == operation
+    assert process.input_args is inputs
+
+    if method == 'standardise':
+        assert engine.standardise_process(process) is process
+        engine.assign(name, process)
+    elif method == 'add':
+        engine.add_process(process, standardise=True)
+    else:
+        engine.assign(name, process)
+
+    assert engine.processes == {name: process}, f"Failed: Assigning process '{name}'."
+    if method in ('standardise', 'add'):
+        assert isinstance(process.operation, RegisteredFunction), f"Failed: Standardising process '{name}'."
+    assert engine.executeProcess(name) == pytest.approx(expected), f"Failed: Executing process '{name}' from engine."
+    assert process.execute(engine) == pytest.approx(expected), f"Failed: Executing process '{name}' directly."
+
+# Split cases by whether their input arguments (case[3]) contain any Reference objects.
+processFunctionParams = [case for case in createProcessParams if not any(isinstance(value, Reference) for value in case[3])]
+processReferenceParams = [case for case in createProcessParams if any(isinstance(value, Reference) for value in case[3])]
+
+
+######################################################################
+##################### MODELENGINE ASSET UNIT TEST ####################
+######################################################################
+
+### Engine asset assignment
+processAssetNames = ('numbers', 'list', 'idx', 'params', 'df', 'df2')
+processAssetExpected = (
+    [0.501, math.pi], list(range(1, 11)), 3, {'expon': expon, 'ratio': ratio},
+    pd.DataFrame([[i * j for j in range(1, 11)] for i in range(1, 11)]),
+    pd.DataFrame([list(range(1, 11)) for _ in range(10)]),
 )
-standardiseProcessInputs = (
-    [testNum], [testDf, ratio3, expon], [testDf, ratio, expon],
-)
-standardiseProcessFailStr = (
-    "process with one input", "process using a multi-input function", "process using string key of already-assigned multi-input function"
-)
-standardiseProcessParams = zip(standardiseProcessName, standardiseProcessFunction, standardiseProcessInputs, standardiseProcessFailStr)
+processAssetParams = list(zip((mEngine,) * len(processAssetNames), processAssetNames, processAssetExpected))
 
-@pytest.mark.parametrize("name, operation, inputs, failStr", standardiseProcessParams)
-def test_process_standardisation(name: str, operation, inputs: list, failStr: str, setup_functions_partial_modelengine):
-    engine = setup_functions_partial_modelengine(operation)
-    ## NEED TO SET UP ENGINE FUNCTIONS FULLY BEFORE CONTINUING
-
-    assert True, f"Failed: Standardising a {failStr}."
+@pytest.mark.parametrize("engine, name, expected", processAssetParams)
+def test_process_engine_assets(engine: ModelEngine, name: str, expected):
+    assert name in engine.assets, f"Failed: Assigning process input asset '{name}'."
+    if isinstance(expected, pd.DataFrame):
+        pd.testing.assert_frame_equal(engine.assets[name], expected)
+    else:
+        assert engine.assets[name] == expected, f"Failed: Assigning process input asset '{name}'."
 
 
-######################################################################################################
-##################### PROCESSES/REFERENCES/MODELENGINE COMPLETE INTEGRATION TEST #####################
-######################################################################################################
+###########################################################################################
+###################### PROCESSES/REGISTEREDFUNCTION INTEGRATION TEST ######################
+###########################################################################################
+
+@pytest.mark.parametrize("engine, name, operation, inputs, expected, method", processFunctionParams)
+def test_process_creation(engine: ModelEngine, name: str, operation, inputs: list, expected: float, method: str):
+    check_process_creation(engine, name, operation, inputs, expected, method)
 
 
+### Executing standalone processes
+standaloneProcessOperations = (simpleFct, RegisteredFunction(simpleFct))
+standaloneProcessInputs = ([testNum], [testNum])
+standaloneProcessOutputs = (13, 13)
+standaloneProcessParams = list(zip(standaloneProcessOperations, standaloneProcessInputs, standaloneProcessOutputs))
 
-def hiding_stuff():
-
-
-    ### Test assigning variables
-    print('=== Engine Check 7 (Assigning Variables) ===')
-    mEngine.assign('numbers', [0.501, math.pi])
-    mEngine.assign('list', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-
-    testDf = pd.DataFrame(data=[pd.Series(ref1.resolve(mEngine))*i for i in range(1,11)])
-    testDf2 = pd.DataFrame(data=[pd.Series(ref1.resolve(mEngine)) for _ in range(1,11)])
-
-    mEngine.assign('idx', 3)
-    mEngine.assign('params', {'expon': 2, 'ratio':0.1})
-    mEngine.assign('df', testDf)
-    mEngine.assign('df2', testDf2)
-    #mEngine.assign()
-    print(mEngine.functions.keys())
-
-    for item in mEngine.assets:
-        print(item, mEngine.assets[item])
-    print('=== Successful Engine Check 7 (Assigned Variables) ===')
+@pytest.mark.parametrize("operation, inputs, expected", standaloneProcessParams)
+def test_process_standalone_execution(operation, inputs: list, expected: float):
+    process = Process('standaloneProcess', operation, inputs)
+    assert process.execute() == expected
+    assert process.execute(return_output=False) == expected
 
 
-    print('=== Creating Processes ===')
-    ratio = 0.1
-    expon = 2
-    testNum = -13
-    ratio2 = 0.2
-    ratio3 = 10
+###########################################################################################
+############### PROCESSES/REFERENCES/MODELENGINE COMPLETE INTEGRATION TEST ################
+###########################################################################################
 
-    pr1 = Process('simpleProcess', simpleFct, [testNum], output_dest='process1') # A process with one input
-    pr2 = Process('standardisedProcess', simpleFct, [testNum]) # Same but standardised first
-    pr3 = Process('addProcess', simpleFct, [testNum]) # Same but added with add_process() (also standardises)
-
-    pr4 = Process('baseProcess', integrationTestFunction, [testDf, ratio, expon]) # Process using a more complex function 
-    pr5 = Process('baseAddProcess', integrationTestFunction, [testDf, ratio2, expon]) # Same but added with add_process (also standardises)
-    pr6 = Process('registeredFunctionProcess', RegisteredFunction(integrationTestFunction), [testDf, ratio, expon]) # Process with same function but registered
-    pr7 = Process('registeredFunctionStringProcess', 'customRF', [testDf, ratio2, expon]) # Process with same function but registered
-
-    pr8 = Process('assignedProcess', 'custom', [testDf, ratio3, expon]) # Process using string call of assigned function (non-standard name)
-    pr9 = Process('assignedFunctionRefProcess', 'custom', [mEngine.assets['df'], mEngine.ref('r'), mEngine.ref('e')]) # Process of string-called function (as well as assets and references)
-
-    pr10 = Process('standardisedStringProcess', 'custom', [testDf, ratio, expon]) # Process using string call of assigned function (but standardised after) 
-    pr11 = Process('standardisedFunctionProcess', integrationTestFunction, [testDf, ratio3, expon]) # Process using a string call of function (standardised after)
-
-    pr12 = Process('directRefProcess', integrationTestFunction, [mEngine.assets['df'], ref2, ref3]) # Process using references instances for values
-    pr13 = Process('refViaEngineProcess', integrationTestFunction, [mEngine.assets['df'], mEngine.ref('r'), mEngine.ref('e')]) # Process using references obtained from ModelEngine
-
-    for pr in [pr1, pr2, pr3, pr4, pr5, pr6, pr7, pr8, pr9, pr10, pr11, pr12, pr13]:
-        print(pr)
-    print('=== Successfully Created Processes ===')
+@pytest.mark.parametrize("engine, name, operation, inputs, expected, method", processReferenceParams)
+def test_process_reference_execution(engine: ModelEngine, name: str, operation, inputs: list, expected: float, method: str):
+    check_process_creation(engine, name, operation, inputs, expected, method)
 
 
-    print('=== Standardising Processes ===')
-    pr2 = mEngine.standardise_process(pr2)
-    pr10 = mEngine.standardise_process(pr10)
-    pr11 = mEngine.standardise_process(pr11)
-    print('=== Successfully Standardised Processes ===')
+### Executing processes and saving outputs in the engine
+processOutputReturn = (True, False)
+processOutputExpected = (13, None)
+processOutputParams = list(zip((mEngine,) * 2, processOutputReturn, processOutputExpected))
 
-
-    # Some processes must be adding or assigned to engine before being executed
-    print('=== Assigning Processes ===')
-    mEngine.assign('simpleProcess', pr1)
-    mEngine.assign('standardisedProcess', pr2)
-    mEngine.add_process(pr3)
-
-    mEngine.assign('baseProcess', pr4)
-    mEngine.add_process(pr5)
-    mEngine.assign('registeredFunctionProcess', pr6)
-    mEngine.assign('registeredFunctionStringProcess', pr7)
-
-    mEngine.assign('assignedProcess', pr8)
-    mEngine.assign('assignedFunctionRefProcess', pr9)
-
-    mEngine.assign('standardisedStringProcess', pr10)
-    mEngine.assign('standardisedFunctionProcess', pr11)
-
-    mEngine.assign('directRefProcess', pr12)
-    mEngine.assign('refViaEngineProcess', pr13)
-
-    testPrcs = set([
-        'simpleProcess', 'standardisedProcess', 'addProcess',
-        'baseProcess', 'baseAddProcess', 'registeredFunctionProcess', 'registeredFunctionStringProcess',
-        'assignedProcess', 'assignedFunctionRefProcess',
-        'standardisedStringProcess', 'standardisedFunctionProcess',
-        'directRefProcess', 'refViaEngineProcess'
-        ])
-
-    assert set(mEngine.processes.keys()) == testPrcs, "Failed: Processes were not added/assigned to the ModelEngine correctly, APr"
-    print('=== Successfully Assigned Processes ===')
-
-
-    print('=== Executing Processes ===')
-    out1a = mEngine.executeProcess('simpleProcess', return_output=False)
-    assert mEngine.assets[pr1.output_dest] == 13, "Failed: Simple function process (executed from engine) did not have correct output result, out1a"
-    mEngine.assets.pop(pr1.output_dest) # Remove answer for proper retest (once to test if different method results in same output)
-    out1b = pr1.execute(mEngine, return_output=True)
-    assert out1b == mEngine.assets[pr1.output_dest], "Failed: Simple function process (executed from process itself) did not execute correctly, out1b"
-    out1c = pr1.execute()
-    assert out1c == 13, "Failed: Simple function process (isolated execution) did not execute correctly, out1b"
-
-    out2a = mEngine.executeProcess('standardisedProcess')
-    assert out2a == 13, "Failed: Simple function standardised process did not execute correctly, out2a"
-    out2b = pr2.execute(mEngine) # Output = True by default
-    assert out2b == 13, "Failed: Simple function standardised process (executed from process itself) did not execute correctly, out2b"
-    out2c = pr2.execute()
-    assert out2c == 13, "Failed: Simple function standardised process (isolated execution) did not execute correctly, out2c"
-    out2d = pr2.execute(return_output=False) # Should work same as out2c (test to confirm overriding no output as nowhere to save output)
-    assert out2d == out2c, "Failed: Simple function standardised process (no output setting test) did not provide output when should be overridden, out2d"
-
-    out3a = mEngine.executeProcess('addProcess')
-    assert out3a == 13, "Failed: Simple function added process did not execute correctly, out3a"
-    out3b = pr3.execute(mEngine)
-    assert out3b == 13, "Failed: Simple function added process (executed from process itself) did not execute correctly, out3b"
-
-    out4a = mEngine.executeProcess('baseProcess')
-    # For 1<=x<=10, (Σ x^2)^2/(10*100) = 148.225
-    assert out4a == 148.225, "Failed: Base function process did not execute correctly, out4a"
-    out4b = pr4.execute(mEngine)
-    assert out4b == 148.225, "Failed: Base function process (executed from process itself) did not execute correctly, out4b"
-
-    out5a = mEngine.executeProcess('baseAddProcess')
-    assert out5a == 296.45, "Failed: Base function added process did not execute correctly, out5a"
-    out5b = pr5.execute(mEngine)
-    assert out5b == 296.45, "Failed: Base function added process (executed from process itself) did not execute correctly, out5b"
-
-    out6a = mEngine.executeProcess('registeredFunctionProcess')
-    assert out6a == 148.225, "Failed: Base registered function process did not execute correctly, out6a"
-    out6b = pr6.execute(mEngine)
-    assert out6b == 148.225, "Failed: Base registered function process (executed from process itself) did not execute correctly, out6b"
-
-    out7a = mEngine.executeProcess('registeredFunctionStringProcess')
-    assert out7a == 296.45, "Failed: Base registered function process (in string) did not execute correctly, out7a"
-    out7b = pr7.execute(mEngine)
-    assert out7b == 296.45, "Failed: Base registered function process (in string, executed from process itself) did not execute correctly, out7a"
-
-    out8a = mEngine.executeProcess('assignedProcess')
-    assert out8a == 14822.5, "Failed: Base function assigned process did not execute correctly, out8a"
-    out8b = pr8.execute(mEngine)
-    assert out8b == 14822.5, "Failed: Base function assigned process (executed from process itself) did not execute correctly, out8b"
-
-    out9a = mEngine.executeProcess('assignedFunctionRefProcess')
-    assert out9a == 148.225, "Failed: Base function assigned process with engine referencing did not execute correctly, out9a"
-    out9b = pr9.execute(mEngine)
-    assert out9b == 148.225, "Failed: Base function assigned process with engine referencing (executed from process itself) did not execute correctly, out9b"
-
-    out10a = mEngine.executeProcess('standardisedStringProcess')
-    assert out10a == 148.225, "Failed: Base function standardised process with string call did not execute correctly, out10a"
-    out10b = pr10.execute(mEngine)
-    assert out10b == 148.225, "Failed: Base function standardised process with string call (executed from process itself) did not execute correctly, out10b"
-
-    out11a = mEngine.executeProcess('standardisedFunctionProcess')
-    assert out11a == 14822.5, "Failed: Base function standardised process did not execute correctly, out11a"
-    out11b = pr11.execute(mEngine)
-    assert out11b == 14822.5, "Failed: Base function standardised process (executed from process itself) did not execute correctly, out11b"
-
-    out12a = mEngine.executeProcess('directRefProcess')
-    assert out12a == 148.225, "Failed: Base function process with References did not execute correctly, out11a"
-    out12b = pr12.execute(mEngine)
-    assert out12b == 148.225, "Failed: Base function process with References (executed from process itself) did not execute correctly, out11b"
-
-    out13a = mEngine.executeProcess('refViaEngineProcess')
-    assert out13a == 148.225, "Failed: Base function process with engine referencing did not execute correctly, out11a"
-    out13b = pr13.execute(mEngine)
-    assert out13b == 148.225, "Failed: Base function process with engine referencing (executed from process itself) did not execute correctly, out11b"
-    print('=== Successfully Executed Processes ===')
-
-    print('=== Integration Test Complete ===')
+@pytest.mark.parametrize("engine, return_output, expected", processOutputParams)
+def test_process_output_destination(engine: ModelEngine, return_output: bool, expected):
+    engine = ModelEngine(assets=engine.assets.copy())
+    process = Process('simpleProcess', simpleFct, [testNum], output_dest='process1')
+    engine.assign(process.name, process)
+    assert engine.executeProcess(process.name, return_output=return_output) == expected
+    assert engine.assets.pop('process1') == 13
+    assert process.execute(engine, return_output=return_output) == expected
+    assert engine.assets['process1'] == 13
 
 
 ##################### FIXTURE FUNCTION(S) ######################

@@ -55,7 +55,7 @@ Write-Host "Committing CHANGELOG as empty"
 git commit --allow-empty-message -F NUL
 
 # 7. Squash the version bump + changelog into the main commit
-Read-Host "Squashing commits by making soft reset. Press Enter to continue..."
+Read-Host "Starting commit squashing by making soft reset. Press Enter to continue..."
 # Identify the target commit before resetting
 $target = git rev-parse HEAD~3
 if ($LASTEXITCODE -ne 0) {

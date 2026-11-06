@@ -1,7 +1,7 @@
 
 def main():
     # To initialise here
-    print('Initialising ArcaneQuant:') # TODO: GIVE VERSION, ADD GUI AND CHECK IF I NEED TO IMPORT
+    print('Initialising ArcaneQuant:') # TODO: GIVE VERSION AND CHECK IF I NEED TO IMPORT
     import arcanequant.quantlib as ql
     print('Importing QuantLib as \'ql\', use this alias for operations.')
     # Importing tools here do not carry over to later classes

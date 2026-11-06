@@ -1,5 +1,14 @@
 ##### CHANGELOG
 
+## [0.6.2] - 2026-11-06
+- Completed and reorganised Process integration tests:
+    > Added parameterised tests for process creation, standardisation, execution and output storage.
+    > Grouped tests by the components involved.
+    > Removed duplicate reference resolution coverage.
+- Converted test parameter zip iterators to reusable lists, preventing reference getter tests from being skipped.
+- Updated commitupdate.ps1 prompts and usage instructions.
+- Removed an outdated TODO from main.py.
+
 ## [0.6.1] - 2026-10-23
 - Rewrote some of the code in commitupdate.ps1:
     > Added redundant checks for commit history and bump2version execution
@@ -141,6 +150,7 @@ both if only both are unique.
 ### Added
 - Initial early release
 - Working pandas/.csv file management
+
 
 
 
