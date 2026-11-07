@@ -1,5 +1,12 @@
 ##### CHANGELOG
 
+## [0.7.0] - 2026-11-07
+- Added .agents/skills/commit-update/SKILL.md for repeatable Codex release workflows:
+    > Documented preconditions, permissions, interactive prompts, signing waits, recovery and verification.
+    > Defaulted to repository-root pytest and visible consoles for tests, releases and checks.
+- Onboarded Codex onto the ArcaneQuant as of 0.7.0
+    > Has access to SKILLS.md (created by Codex under direction) to execute workflows on top of existing native capabilities.
+
 ## [0.6.2] - 2026-11-06
 - Completed and reorganised Process integration tests:
     > Added parameterised tests for process creation, standardisation, execution and output storage.
