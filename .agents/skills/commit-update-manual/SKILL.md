@@ -1,11 +1,12 @@
 ---
-name: commit-update
-description: Commit, version, sign, and push an ArcaneQuant update using the repository's existing commitupdate.ps1, including interactive prompts and verification.
+name: commit-update-manual
+description: Commit, version, sign, and push an ArcaneQuant update using commitupdate_manual.ps1, including interactive squash and push confirmations and verification.
+compatibility: Requires PowerShell, Git, and bump2version installed and available on PATH. Network access is required for remote Git operations.
 ---
 
 # Commit update
 
-Invoke [commitupdate.ps1](../../../commitupdate.ps1) from the repository root. Keep its implementation in that file; do not generate a replacement release script.
+Invoke [commitupdate_manual.ps1](../../../commitupdate_manual.ps1) from the repository root. Keep its implementation in that file; do not generate a replacement release script. For automatic execution, use [commit-update-auto](../commit-update-auto/SKILL.md).
 
 ## Mandatory preparation
 
@@ -13,19 +14,20 @@ Invoke [commitupdate.ps1](../../../commitupdate.ps1) from the repository root. K
 2. Inspect staged, unstaged, and untracked changes. Record the starting HEAD, branch, configured upstream, and remote URL. Establish the intended change scope, version increment, resulting version, and commit text. Check that the release tag does not already exist.
 3. Confirm authorization for committing all intended changes, squashing the script's temporary commits, creating the signed tag, and pushing to the intended destination. Reuse existing authorization; obtain missing authorization before launching. Invoking this skill alone grants no reset or push permission. Account for `git add .` staging all changes and `git push --follow-tags` publishing other reachable unpublished annotated tags.
 4. Run `pytest` directly from the repository root, then `git diff --check`, using the visible-console approach below. The user's current environment supports this invocation; do not select individual files or cases by default. If an environment limitation prevents the full run, report it and identify any omitted checks.
-5. Prepare the exact multiline message as changelog body text: use `- ` for changes and four spaces followed by `> ` for supporting details. Omit the version/date heading; the script supplies it. Use the same body for the final Git commit. Derive its contents from the actual diff.
+5. Apply [write-changelog](../write-changelog/SKILL.md) to the reviewed diff and user instructions to prepare the exact changelog body in the repository's existing format. Request body-only output and use it as the commit message; the script supplies the version/date heading and writes CHANGELOG.md.
 
 ## Visible consoles: local preference
 
 - Run tests, the release script, and verification commands in a user-visible Command Prompt or PowerShell window by default. Reuse the same window and batch related checks where practical. Keep the results visible for the user to inspect.
 - Prefer a visible terminal that tools can also control. Otherwise launch a desktop console with `Start-Process -WindowStyle Normal`, the repository root as `-WorkingDirectory`, and any required execution approval. A tool session's `tty: true` alone does not establish desktop visibility.
 - To automate inputs while showing progress, run the existing script in a controlled `tty: true` session and mirror its output through `Tee-Object` to a temporary log displayed by a visible console with `Get-Content -Wait`. Keep the script's stdin connected to the controlled terminal. Explain that the visible window displays output; Codex enters the script inputs. Prefer this arrangement over a detached interactive console when supported.
+- Use the same controlled-terminal and separate visible PowerShell output window for `pytest` so Codex can run the suite while the user watches its progress. When piping pytest output, use `pytest --color=yes` from the repository root and preserve ANSI colour sequences through the log and an ANSI-capable PowerShell display. Keep the window open for inspection.
 - Capture output and explicit command completion/exit status in temporary logs outside the repository so Codex can monitor the visible run. Do not infer completion from the window closing or remaining open. Read summaries and relevant errors rather than repeatedly importing the entire log.
 - Before launching a detached console that tools cannot control, tell the user which script prompts they must answer and provide the agreed message. Monitor its transcript and repository state; do not attempt `write_stdin` against an unrelated tool session. If visibility is unavailable, explain the limitation before using a tool-only terminal.
 
 ## Mandatory interactive execution
 
-1. Invoke the existing `commitupdate.ps1` from the repository root using the visible-console arrangement above; use `powershell.exe -NoProfile -File .\commitupdate.ps1` for a direct console launch. Preserve the input-controlling session for the remaining prompts. Request execution escalation when required for opening the console, Git metadata writes, signing, or network access; do not bypass a denied permission.
+1. Invoke the existing `commitupdate_manual.ps1` from the repository root using the visible-console arrangement above; use `powershell.exe -NoProfile -File .\commitupdate_manual.ps1` for a direct console launch. Preserve the input-controlling session for the remaining prompts. Request execution escalation when required for opening the console, Git metadata writes, signing, or network access; do not bypass a denied permission.
 2. Answer the update-type prompt with the agreed `patch`, `minor`, or `major`, then Enter.
 3. Enter the prepared message with real newlines. End its final line with Enter, then send Ctrl+Z and Enter to complete `[Console]::In.ReadToEnd()`. Use `write_stdin` only for an actually connected, controllable terminal; use `\r` for Enter and `\u001a\r` for the final EOF sequence. In a detached console, have the user enter these inputs.
 4. Monitor output while the script creates the initial commit, bumps the version, and updates the changelog. Treat quiet or slow GPG signing as a wait, not a failure. Tell the user when signing is awaiting their input; let them enter the password in the GPG prompt, never in chat. Signing may prompt again for the final commit or tag.

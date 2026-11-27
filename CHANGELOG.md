@@ -1,5 +1,14 @@
 ##### CHANGELOG
 
+## [0.7.1] - 2026-11-27
+- Reworked the PowerShell scripts and Codex skills for version updates:
+    > Split commitupdate.ps1 into manual and automatic versions, with corresponding commit-update-manual and commit-update-auto skills.
+    > Added commitupdate_branch_auto.ps1 and commit-update-branch-auto to publish an update on a branch and open a pull request. Release tagging follows the merge.
+    > Added a branch update guide and tests for branch publication, conflicting version updates and failed releases.
+- Added prompt-agent-identity and prompt-agent-task to define agent roles and assign work, and write-changelog to draft release notes.
+- Added AGENTS.md and a guide for parallel agent work, covering task records, message relays and handovers.
+- Created a shared knowledge catalog under docs/knowledge, starting with OpenAI agent building. Excluded docs from Python package discovery.
+
 ## [0.7.0] - 2026-11-07
 - Added .agents/skills/commit-update/SKILL.md for repeatable Codex release workflows:
     > Documented preconditions, permissions, interactive prompts, signing waits, recovery and verification.
