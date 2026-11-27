@@ -1,10 +1,10 @@
-# commitupdate.ps1
+# commitupdate_auto.ps1
 
 # Get part update from user
 $part = Read-Host "Enter the update type (patch/minor/major)"
 
 # Prompt for multi-line commit message
-Write-Host "Enter the commit message (finish with Ctrl+Z then Enter):"
+Write-Host "Enter the commit message. Finish with Enter (new line), Ctrl+Z then Enter:"
 $msg = [Console]::In.ReadToEnd()
 
 # Get the original commit (will squash commits to this)
@@ -55,7 +55,7 @@ Write-Host "Committing CHANGELOG as empty"
 git commit --allow-empty-message -F NUL
 
 # 7. Squash the version bump + changelog into the main commit
-Read-Host "Starting commit squashing by making soft reset. Press Enter to continue..."
+Write-Host "Starting commit squashing by making soft reset."
 # Identify the target commit before resetting
 $target = git rev-parse HEAD~3
 if ($LASTEXITCODE -ne 0) {
@@ -75,8 +75,7 @@ Write-Host "`nCommits that will be squashed:"
 git log --oneline "$target..HEAD"
 
 ### Squash by soft reset
-$confirm = Read-Host "`nReset HEAD to $target while preserving staged changes? (Y/N)"
-if ($confirm -ne "Y") { throw "Reset cancelled." }
+$confirm = Write-Host "`nResetting HEAD to $target while preserving staged changes"
 git reset --soft $target
 if ($LASTEXITCODE -ne 0) { throw "Reset failed." }
 
@@ -90,7 +89,7 @@ git tag -s "$vers" -m "Version $vers"
 if ($LASTEXITCODE -ne 0) { throw "Tag creation failed." }
 
 # 8. Push (no force needed if this is the first push)
-Read-Host "Pushing to Git. Press Enter to continue..."
+Write-Host "Pushing to Git."
 git push --follow-tags
+if ($LASTEXITCODE -ne 0) { throw "Push failed." }
 Write-Host "Pushed $vers to Git."
-
